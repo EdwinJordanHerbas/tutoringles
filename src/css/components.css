@@ -1,0 +1,604 @@
+/* TutorIngles — components.css (NeumorphGlass Apple)
+   Componentes reutilizables: botones, cards, badges, modals, inputs, spinners */
+
+/* ── BOTONES ───────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 11px 20px;
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+  width: 100%;
+  text-transform: uppercase;
+}
+
+.btn-primary {
+  background: linear-gradient(145deg, #1a8fff, #006fe0);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  box-shadow: 4px 4px 12px rgba(0, 122, 255, 0.40), -2px -2px 8px rgba(255, 255, 255, 0.90);
+  padding: 14px 28px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.btn-primary:hover  { background: linear-gradient(145deg, #2a9fff, #0077ee); box-shadow: 6px 6px 16px rgba(0,122,255,0.50), -3px -3px 10px rgba(255,255,255,0.95); }
+.btn-primary:active { box-shadow: var(--shadow-inset); transform: scale(0.97); }
+
+/* Alias -- nombre alternativo que usa el spec */
+.btn--primary { }
+.btn--primary { background: linear-gradient(145deg, #1a8fff, #006fe0); color: #fff; border: none; border-radius: var(--radius); box-shadow: 4px 4px 12px rgba(0, 122, 255, 0.40), -2px -2px 8px rgba(255, 255, 255, 0.90); padding: 14px 28px; font-weight: 600; }
+.btn--primary:active { box-shadow: var(--shadow-inset); transform: scale(0.97); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid rgba(0,122,255,0.40);
+  box-shadow: var(--shadow-raised);
+}
+
+.btn-ghost:hover  { background: var(--accent-dim); }
+.btn-ghost:active { transform: scale(0.97); }
+
+.btn-subtle {
+  background: var(--surface-raised);
+  color: var(--text-dim);
+  border: 1px solid rgba(255,255,255,0.60);
+  box-shadow: var(--shadow-raised);
+}
+
+.btn-subtle:hover  { box-shadow: var(--shadow-float); }
+.btn-subtle:active { box-shadow: var(--shadow-inset); transform: scale(0.97); }
+
+.btn-danger {
+  background: rgba(255,69,58,0.12);
+  color: var(--danger);
+  border: 1px solid rgba(255,69,58,0.30);
+  box-shadow: var(--shadow-raised);
+}
+
+.btn-sm {
+  padding: 7px 14px;
+  font-size: 0.6rem;
+  letter-spacing: 1.5px;
+}
+
+.btn-icon {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  font-size: 1rem;
+}
+
+/* ── CARDS ─────────────────────────────────────────────── */
+.card {
+  background: var(--surface-glass);
+  border: var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-raised);
+}
+
+/* Glass Card — principal componente visual */
+.glass-card {
+  background: var(--surface-glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: var(--border);
+  border-top: 1px solid var(--rim-light);
+  border-bottom: 1px solid var(--rim-bottom);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-float), inset 0 1px 0 rgba(255,255,255,0.65);
+  padding: 20px;
+  margin-bottom: 12px;
+}
+
+/* Glass Card con acento de color */
+.glass-card-accent {
+  background: linear-gradient(135deg, rgba(0,122,255,0.08) 0%, var(--surface-glass) 100%);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: var(--border);
+  border-top: 1px solid var(--rim-light);
+  border-bottom: 1px solid var(--rim-bottom);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-float), inset 0 1px 0 rgba(255,255,255,0.65);
+  padding: 20px;
+  margin-bottom: 12px;
+}
+
+/* NM Card — neumórfico raised */
+.nm-card {
+  background: var(--surface-raised);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-raised);
+  padding: 20px;
+  border: 1px solid rgba(255,255,255,0.70);
+  margin-bottom: 12px;
+}
+
+/* NM Card inset (hundido) */
+.nm-card-inset {
+  background: var(--surface-inset);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-inset);
+  padding: 20px;
+  border: 1px solid rgba(255,255,255,0.40);
+  margin-bottom: 12px;
+}
+
+.card-title {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 3px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  text-transform: uppercase;
+}
+
+/* ── FLASH CARD (vocab SRS) ────────────────────────────── */
+.flash-card {
+  background: var(--surface-glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: var(--border);
+  border-top: 1px solid var(--rim-light);
+  border-bottom: 1px solid var(--rim-bottom);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-float);
+  padding: 28px 20px;
+  margin-bottom: 16px;
+  text-align: center;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.2s;
+  perspective: 1000px;
+}
+
+.flash-card:active { transform: scale(0.98); box-shadow: var(--shadow-inset); }
+.flash-card.flipped { border-color: rgba(0,122,255,0.40); box-shadow: var(--shadow-float), 0 0 20px rgba(0,122,255,0.15); }
+
+.flash-word {
+  font-family: var(--font-mono);
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 1px;
+}
+
+.flash-translation {
+  font-size: 1rem;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.flash-example {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-style: italic;
+  max-width: 90%;
+  line-height: 1.6;
+}
+
+.flash-level-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+/* ── BADGES ────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 1.5px;
+  font-weight: 700;
+  background: rgba(255,255,255,0.60);
+  color: var(--text-dim);
+  border: 1px solid rgba(255,255,255,0.80);
+  box-shadow: 2px 2px 6px rgba(156,190,214,0.30), -1px -1px 4px rgba(255,255,255,0.80);
+}
+
+.badge-level { background: var(--accent-dim); color: var(--accent); border-color: rgba(0,122,255,0.30); }
+
+/* Colores de nivel CEFR */
+.badge-a2 { background: rgba(255,159,10,0.15); color: var(--level-a2); border: 1px solid rgba(255,159,10,0.30); border-radius: 20px; padding: 4px 12px; font-size: 12px; font-weight: 700; }
+.badge-b1 { background: rgba(48,209,88,0.15);  color: var(--level-b1); border: 1px solid rgba(48,209,88,0.30);  border-radius: 20px; padding: 4px 12px; font-size: 12px; font-weight: 700; }
+.badge-b2 { background: rgba(10,132,255,0.15); color: var(--level-b2); border: 1px solid rgba(10,132,255,0.30); border-radius: 20px; padding: 4px 12px; font-size: 12px; font-weight: 700; }
+.badge-c1 { background: rgba(191,90,242,0.15); color: var(--level-c1); border: 1px solid rgba(191,90,242,0.30); border-radius: 20px; padding: 4px 12px; font-size: 12px; font-weight: 700; }
+
+.badge-success { background: rgba(48,209,88,0.15);  color: var(--success); border-color: rgba(48,209,88,0.30); }
+.badge-danger  { background: rgba(255,69,58,0.12);  color: var(--danger);  border-color: rgba(255,69,58,0.30); }
+
+/* ── RANK BADGE ────────────────────────────────────────── */
+.rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  border: 1px solid rgba(255,255,255,0.65);
+  box-shadow: var(--shadow-raised);
+}
+
+.rank-badge.rank-s { background: var(--accent-dim);             color: var(--accent);  border-color: rgba(0,122,255,0.30); }
+.rank-badge.rank-a { background: rgba(48,209,88,0.15);           color: var(--success); border-color: rgba(48,209,88,0.30); }
+.rank-badge.rank-b { background: rgba(255,159,10,0.15);          color: var(--warning); border-color: rgba(255,159,10,0.30); }
+.rank-badge.rank-c { background: rgba(90,200,250,0.15);          color: var(--info);    border-color: rgba(90,200,250,0.30); }
+.rank-badge.rank-d { background: var(--surface-raised);          color: var(--text-muted);  border-color: rgba(156,190,214,0.35); }
+
+/* ── STREAK CHIP ───────────────────────────────────────── */
+.streak-chip {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--warning);
+  background: rgba(255,159,10,0.12);
+  border: 1px solid rgba(255,159,10,0.25);
+  border-radius: 20px;
+  padding: 3px 9px;
+  letter-spacing: 1px;
+  box-shadow: var(--shadow-raised);
+}
+
+/* ── PROGRESS BAR con shimmer ──────────────────────────── */
+.progress-bar {
+  width: 100%;
+  height: 10px;
+  background: var(--surface-inset);
+  box-shadow: var(--shadow-inset);
+  border-radius: 100px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  height: 100%;
+  border-radius: 100px;
+  box-shadow: 0 0 12px rgba(0, 122, 255, 0.50);
+  position: relative;
+  transition: width 1s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%; width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent);
+  animation: shimmer 2s infinite;
+}
+
+.progress-label {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+  margin-top: 5px;
+  text-align: right;
+}
+
+/* ── INPUTS / FIELDS ───────────────────────────────────── */
+.field { margin-bottom: 12px; }
+
+.field label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+  text-transform: uppercase;
+}
+
+.field-input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--surface-inset);
+  border: 1px solid rgba(255,255,255,0.60);
+  box-shadow: var(--shadow-inset);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.9rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.field-input:focus {
+  border-color: rgba(0,122,255,0.50);
+  box-shadow: var(--shadow-inset), 0 0 0 3px var(--accent-dim);
+}
+
+.field-input::placeholder { color: var(--text-muted); }
+
+textarea.field-input {
+  resize: vertical;
+  min-height: 80px;
+  line-height: 1.5;
+}
+
+/* ── MODAL ─────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(180,210,230,0.35);
+  backdrop-filter: blur(8px) saturate(150%);
+  -webkit-backdrop-filter: blur(8px) saturate(150%);
+  z-index: 500;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: fadeIn 0.2s ease;
+}
+
+.modal {
+  width: 100%;
+  max-width: 480px;
+  background: var(--surface-glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: var(--border);
+  border-top: 1px solid var(--rim-light);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  box-shadow: var(--shadow-float);
+  padding: 24px 20px calc(24px + var(--safe-bottom));
+  animation: slideUp 0.3s cubic-bezier(.4,0,.2,1);
+}
+
+.modal-title {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 3px;
+  color: var(--text-dim);
+  margin-bottom: 20px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.modal-handle {
+  width: 36px;
+  height: 4px;
+  background: rgba(156,190,214,0.40);
+  border-radius: 2px;
+  margin: 0 auto 18px;
+  box-shadow: var(--shadow-inset);
+}
+
+/* ── SPINNER ───────────────────────────────────────────── */
+.spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(156,190,214,0.35);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── EMPTY STATE ───────────────────────────────────────── */
+.empty-state {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+/* ── QUICK GRID (HOY: accesos rápidos) ────────────────── */
+.quick-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.quick-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 14px 6px;
+  background: var(--surface-raised);
+  border: 1px solid rgba(255,255,255,0.70);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  box-shadow: var(--shadow-raised);
+}
+
+.quick-btn:hover  { box-shadow: var(--shadow-float); color: var(--accent); }
+.quick-btn:active { box-shadow: var(--shadow-inset); transform: scale(0.95); }
+
+.quick-icon { font-size: 1.4rem; }
+
+/* ── GOAL ROW (HOY: metas del día) ────────────────────── */
+.goal-row { display: flex; flex-direction: column; gap: 10px; }
+
+.goal-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  background: var(--surface-raised);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255,255,255,0.65);
+  box-shadow: var(--shadow-raised);
+  transition: box-shadow 0.2s;
+}
+
+.goal-item.done { border-color: rgba(48,209,88,0.40); box-shadow: var(--shadow-raised), 0 0 0 1px rgba(48,209,88,0.20); }
+
+.goal-icon { font-size: 1.2rem; flex-shrink: 0; }
+
+.goal-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.goal-label {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.goal-count {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.goal-check {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(156,190,214,0.40);
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: all 0.2s;
+  box-shadow: var(--shadow-inset);
+}
+
+.goal-item.done .goal-check {
+  background: var(--success);
+  border-color: var(--success);
+  box-shadow: 0 0 8px rgba(48,209,88,0.40);
+}
+
+/* ── STREAK WEEK DOTS ──────────────────────────────────── */
+.streak-week {
+  display: flex;
+  justify-content: space-around;
+  gap: 4px;
+}
+
+.streak-day-dot {
+  flex: 1;
+  aspect-ratio: 1;
+  max-width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  border: 1px solid rgba(255,255,255,0.65);
+  box-shadow: var(--shadow-raised);
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  transition: all 0.2s;
+}
+
+.streak-day-dot.done    { background: var(--accent-dim); border-color: rgba(0,122,255,0.40); color: var(--accent); box-shadow: var(--shadow-raised), 0 0 8px rgba(0,122,255,0.20); }
+.streak-day-dot.today   { border-color: rgba(156,190,214,0.60); color: var(--text-dim); box-shadow: var(--shadow-float); }
+.streak-day-dot.partial { background: rgba(255,159,10,0.10); border-color: rgba(255,159,10,0.40); color: var(--warning); }
+
+/* ── REVIEW BUTTONS (SRS) ──────────────────────────────── */
+.review-btns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.btn-correct {
+  background: rgba(48,209,88,0.12);
+  color: var(--success);
+  border: 1px solid rgba(48,209,88,0.30);
+  padding: 14px;
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: var(--shadow-raised);
+}
+
+.btn-correct:hover  { box-shadow: var(--shadow-float); }
+.btn-correct:active { box-shadow: var(--shadow-inset); transform: scale(0.97); }
+
+.btn-wrong {
+  background: rgba(255,69,58,0.10);
+  color: var(--danger);
+  border: 1px solid rgba(255,69,58,0.30);
+  padding: 14px;
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: var(--shadow-raised);
+}
+
+.btn-wrong:hover  { box-shadow: var(--shadow-float); }
+.btn-wrong:active { box-shadow: var(--shadow-inset); transform: scale(0.97); }
+
+/* ── SCORE CHART (Exam / Progress) ────────────────────── */
+.score-section {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  align-items: center;
+}
+
+.score-label {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  flex: 1;
+  min-width: 80px;
+}
+
+.score-bar-wrap {
+  flex: 2;
+  height: 8px;
+  background: var(--surface-inset);
+  box-shadow: var(--shadow-inset);
+  border-radius: 100px;
+  overflow: hidden;
+}
+
+.score-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-3), var(--accent));
+  border-radius: 100px;
+  transition: width 0.5s ease;
+  box-shadow: 0 0 8px rgba(0,122,255,0.35);
+}
+
+.score-pct {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--accent);
+  min-width: 34px;
+  text-align: right;
+}

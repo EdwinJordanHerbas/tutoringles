@@ -1,0 +1,892 @@
+/* TutorIngles — sections.css (NeumorphGlass Apple)
+   Estilos específicos de cada sección. */
+
+/* ── HOY ───────────────────────────────────────────────── */
+/* (goal-row, quick-grid, streak-week están en components.css) */
+
+/* ── VOCAB ─────────────────────────────────────────────── */
+#sec-vocab .vocab-filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+
+#sec-vocab .vocab-filters::-webkit-scrollbar { display: none; }
+
+.filter-chip {
+  flex-shrink: 0;
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  border: 1px solid rgba(255,255,255,0.65);
+  box-shadow: var(--shadow-raised);
+  white-space: nowrap;
+}
+
+.filter-chip.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: rgba(0,122,255,0.35);
+  box-shadow: var(--shadow-raised), 0 0 12px rgba(0,122,255,0.15);
+}
+
+#sec-vocab .word-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.word-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface-raised);
+  border: 1px solid rgba(255,255,255,0.65);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: var(--shadow-raised);
+}
+
+.word-item:hover { box-shadow: var(--shadow-float); }
+.word-item:active { box-shadow: var(--shadow-inset); }
+
+.word-item-main { flex: 1; min-width: 0; }
+
+.word-item-en {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.word-item-es {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.word-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.word-status-dot.new      { background: rgba(156,190,214,0.50); }
+.word-status-dot.learning { background: var(--warning); box-shadow: 0 0 6px rgba(255,159,10,0.40); }
+.word-status-dot.review   { background: var(--info);    box-shadow: 0 0 6px rgba(90,200,250,0.40); }
+.word-status-dot.mastered { background: var(--success); box-shadow: 0 0 6px rgba(48,209,88,0.40); }
+
+/* ── SPEAK ─────────────────────────────────────────────── */
+#sec-speak .speak-prompt {
+  text-align: center;
+  padding: 28px 16px;
+}
+
+.speak-phrase {
+  font-size: 1.1rem;
+  line-height: 1.6;
+  color: var(--text);
+  margin-bottom: 20px;
+  font-style: italic;
+}
+
+.speak-transcript {
+  background: var(--surface-inset);
+  border: 1px solid rgba(255,255,255,0.55);
+  box-shadow: var(--shadow-inset);
+  border-radius: var(--radius);
+  padding: 14px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  min-height: 60px;
+  margin-bottom: 14px;
+  text-align: left;
+  line-height: 1.6;
+}
+
+.speak-record-btn {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  border: 2px solid rgba(0,122,255,0.30);
+  font-size: 1.6rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-float);
+}
+
+.speak-record-btn.recording {
+  background: rgba(255,69,58,0.10);
+  border-color: var(--danger);
+  animation: pulse-glow 1s ease infinite;
+  box-shadow: 0 0 24px rgba(255,69,58,0.30), var(--shadow-raised);
+}
+
+/* ── GRAMMAR ───────────────────────────────────────────── */
+#sec-gram .topic-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.topic-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--surface-raised);
+  border: 1px solid rgba(255,255,255,0.65);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: var(--shadow-raised);
+}
+
+.topic-item:hover         { box-shadow: var(--shadow-float); }
+.topic-item.completed     { border-color: rgba(48,209,88,0.35); box-shadow: var(--shadow-raised), 0 0 10px rgba(48,209,88,0.10); }
+
+.topic-item-info { flex: 1; min-width: 0; }
+
+.topic-item-title {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+
+.topic-item-meta {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+}
+
+.topic-check {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid rgba(156,190,214,0.40);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  transition: all 0.2s;
+  box-shadow: var(--shadow-inset);
+}
+
+.topic-item.completed .topic-check {
+  background: var(--success);
+  border-color: var(--success);
+  color: #fff;
+  box-shadow: 0 0 8px rgba(48,209,88,0.40);
+}
+
+/* ── EXAM ──────────────────────────────────────────────── */
+#sec-exam .exam-sections {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.exam-section-card {
+  padding: 14px;
+  background: var(--surface-raised);
+  border: 1px solid rgba(255,255,255,0.65);
+  border-radius: var(--radius);
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: var(--shadow-raised);
+}
+
+.exam-section-card:hover { box-shadow: var(--shadow-float); }
+.exam-section-card:active { box-shadow: var(--shadow-inset); }
+
+.exam-section-icon { font-size: 1.4rem; margin-bottom: 6px; }
+
+.exam-section-name {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.exam-section-avg {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.exam-history-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(156,190,214,0.20);
+}
+
+.exam-history-date {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  min-width: 70px;
+}
+
+.exam-history-section {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  flex: 1;
+  text-transform: capitalize;
+}
+
+.exam-history-score {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SECCIÓN PROGRESO — NeumorphGlass Apple
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Card principal de nivel ────────────────────────────── */
+.prg-level-card {
+  background: var(--surface-raised);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-raised);
+  border: 1px solid rgba(255,255,255,0.75);
+  padding: 28px 24px 24px;
+  margin-bottom: 16px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.prg-level-card::before {
+  content: '';
+  position: absolute;
+  top: -40px; right: -40px;
+  width: 140px; height: 140px;
+  background: radial-gradient(circle, rgba(0,122,255,0.10) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.prg-level-badge-big {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px; height: 80px;
+  border-radius: 24px;
+  background: linear-gradient(145deg, rgba(0,122,255,0.15), rgba(0,122,255,0.05));
+  border: 2px solid rgba(0,122,255,0.30);
+  box-shadow: var(--shadow-raised), 0 0 24px rgba(0,122,255,0.15);
+  font-family: var(--font-mono);
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: var(--accent);
+  margin: 0 auto 12px;
+}
+
+.prg-level-tag {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 3px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.prg-level-subtitle {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-dim);
+  margin-bottom: 18px;
+}
+
+.prg-level-xp-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.prg-level-xp-label {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.prg-level-pct {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+/* ── Roadmap A2 → C1 ────────────────────────────────────── */
+.prg-roadmap {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px 0;
+  position: relative;
+  margin-bottom: 20px;
+}
+
+.prg-roadmap-line {
+  position: absolute;
+  top: 50%;
+  left: 10%;
+  right: 10%;
+  height: 3px;
+  background: var(--surface-inset);
+  box-shadow: var(--shadow-inset);
+  border-radius: 100px;
+  transform: translateY(-50%);
+}
+
+.prg-roadmap-fill {
+  position: absolute;
+  left: 0; top: 0; height: 100%;
+  background: linear-gradient(90deg, var(--accent-3), var(--accent));
+  border-radius: 100px;
+  box-shadow: 0 0 8px rgba(0,122,255,0.40);
+  transition: width 0.8s cubic-bezier(0.34,1.56,0.64,1);
+}
+
+.prg-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+  z-index: 1;
+}
+
+.prg-node-circle {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  border: 2px solid rgba(156,190,214,0.40);
+  box-shadow: var(--shadow-raised);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  transition: all 0.3s;
+}
+
+.prg-node.done .prg-node-circle {
+  background: rgba(48,209,88,0.12);
+  border-color: rgba(48,209,88,0.40);
+  color: var(--success);
+  box-shadow: var(--shadow-raised), 0 0 12px rgba(48,209,88,0.20);
+}
+
+.prg-node.current .prg-node-circle {
+  background: var(--accent-dim);
+  border-color: rgba(0,122,255,0.50);
+  color: var(--accent);
+  box-shadow: var(--shadow-raised), 0 0 20px rgba(0,122,255,0.25);
+  animation: prg-pulse 2s ease infinite;
+}
+
+.prg-node-label {
+  font-family: var(--font-mono);
+  font-size: 0.45rem;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+
+.prg-node.current .prg-node-label { color: var(--accent); font-weight: 700; }
+.prg-node.done    .prg-node-label { color: var(--success); }
+
+@keyframes prg-pulse {
+  0%, 100% { box-shadow: var(--shadow-raised), 0 0 16px rgba(0,122,255,0.25); }
+  50%       { box-shadow: var(--shadow-raised), 0 0 28px rgba(0,122,255,0.45); }
+}
+
+/* ── Stats grid (4 cards) ───────────────────────────────── */
+.prg-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.prg-stat-card {
+  background: var(--surface-raised);
+  border: 1px solid rgba(255,255,255,0.70);
+  border-radius: var(--radius-lg);
+  padding: 16px 14px;
+  text-align: center;
+  box-shadow: var(--shadow-raised);
+  position: relative;
+  overflow: hidden;
+}
+
+.prg-stat-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.20) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.prg-stat-icon {
+  font-size: 1.4rem;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.prg-stat-value {
+  font-family: var(--font-mono);
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.prg-stat-label {
+  font-family: var(--font-mono);
+  font-size: 0.48rem;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+/* ── Habilidades (5 barras) ─────────────────────────────── */
+.prg-skills-card {
+  background: var(--surface-raised);
+  border: 1px solid rgba(255,255,255,0.70);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-raised);
+  padding: 20px;
+  margin-bottom: 14px;
+}
+
+.prg-skill-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.prg-skill-row:last-child { margin-bottom: 0; }
+
+.prg-skill-icon {
+  font-size: 1.1rem;
+  width: 28px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.prg-skill-info { flex: 1; min-width: 0; }
+
+.prg-skill-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.prg-skill-name {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+.prg-skill-lvl {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.prg-skill-bar {
+  height: 8px;
+  background: var(--surface-inset);
+  box-shadow: var(--shadow-inset);
+  border-radius: 100px;
+  overflow: hidden;
+}
+
+.prg-skill-fill {
+  height: 100%;
+  border-radius: 100px;
+  position: relative;
+  transition: width 1s cubic-bezier(0.34,1.56,0.64,1);
+}
+
+.prg-skill-fill::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%; width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.50), transparent);
+  animation: shimmer 2.5s infinite;
+}
+
+/* Colores por habilidad */
+.skill-reading   { background: linear-gradient(90deg, #0070d4, #007aff); box-shadow: 0 0 10px rgba(0,122,255,0.35); }
+.skill-writing   { background: linear-gradient(90deg, #bf5af2, #d070ff); box-shadow: 0 0 10px rgba(191,90,242,0.35); }
+.skill-listening { background: linear-gradient(90deg, #30a868, #30d158); box-shadow: 0 0 10px rgba(48,209,88,0.35); }
+.skill-speaking  { background: linear-gradient(90deg, #e05000, #ff6b00); box-shadow: 0 0 10px rgba(255,107,0,0.35); }
+.skill-vocab     { background: linear-gradient(90deg, #c88900, #ff9f0a); box-shadow: 0 0 10px rgba(255,159,10,0.35); }
+
+/* Badge colores por habilidad */
+.skill-lvl-reading   { color: var(--level-b2); background: rgba(0,122,255,0.12);   border: 1px solid rgba(0,122,255,0.25); }
+.skill-lvl-writing   { color: var(--level-c1); background: rgba(191,90,242,0.12);  border: 1px solid rgba(191,90,242,0.25); }
+.skill-lvl-listening { color: var(--level-b1); background: rgba(48,209,88,0.12);   border: 1px solid rgba(48,209,88,0.25); }
+.skill-lvl-speaking  { color: #ff6b00;         background: rgba(255,107,0,0.12);   border: 1px solid rgba(255,107,0,0.25); }
+.skill-lvl-vocab     { color: var(--level-a2); background: rgba(255,159,10,0.12);  border: 1px solid rgba(255,159,10,0.25); }
+
+/* ── Countdown al examen (circular) ────────────────────── */
+.prg-countdown-card {
+  background: linear-gradient(145deg, rgba(0,122,255,0.08), var(--surface-raised));
+  border: 1px solid rgba(0,122,255,0.20);
+  border-top: 1px solid rgba(255,255,255,0.70);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-raised), 0 0 20px rgba(0,122,255,0.08);
+  padding: 20px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.prg-countdown-svg {
+  flex-shrink: 0;
+  width: 72px;
+  height: 72px;
+  position: relative;
+}
+
+.prg-countdown-track {
+  fill: none;
+  stroke: var(--surface-inset);
+  stroke-width: 5;
+  filter: drop-shadow(2px 2px 3px rgba(156,190,214,0.60)) drop-shadow(-1px -1px 2px rgba(255,255,255,0.80));
+}
+
+.prg-countdown-arc {
+  fill: none;
+  stroke: url(#cntGrad);
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-dasharray: 188.5;
+  stroke-dashoffset: 188.5;
+  transform: rotate(-90deg);
+  transform-origin: center;
+  transition: stroke-dashoffset 1.2s cubic-bezier(0.34,1.56,0.64,1);
+  filter: drop-shadow(0 0 4px rgba(0,122,255,0.50));
+}
+
+.prg-countdown-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+
+.prg-countdown-days {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.prg-countdown-dslabel {
+  font-family: var(--font-mono);
+  font-size: 0.38rem;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+}
+
+.prg-countdown-info { flex: 1; }
+
+.prg-countdown-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.prg-countdown-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin-bottom: 10px;
+}
+
+.prg-countdown-date {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 2px;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+
+/* ── Logros recientes ───────────────────────────────────── */
+.prg-achievements-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.prg-achievement {
+  background: var(--surface-raised);
+  border: 1px solid rgba(255,255,255,0.70);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-raised);
+  padding: 14px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  position: relative;
+  overflow: hidden;
+}
+
+.prg-achievement.locked {
+  opacity: 0.50;
+  filter: grayscale(0.6);
+}
+
+.prg-achievement-icon {
+  font-size: 1.6rem;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.prg-achievement-text { flex: 1; min-width: 0; }
+
+.prg-achievement-name {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prg-achievement-desc {
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.prg-achievement-check {
+  position: absolute;
+  top: 8px; right: 8px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--success);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.5rem;
+  color: #fff;
+  box-shadow: 0 0 8px rgba(48,209,88,0.40);
+}
+
+/* ── Records strip ──────────────────────────────────────── */
+.prg-records-strip {
+  display: flex;
+  justify-content: space-around;
+  text-align: center;
+  padding: 8px 0;
+  gap: 4px;
+}
+
+.prg-record-item { flex: 1; }
+
+.prg-record-value {
+  font-family: var(--font-mono);
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+
+.prg-record-label {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* ── XP rank bar ────────────────────────────────────────── */
+.prg-xp-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.prg-rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px; height: 38px;
+  border-radius: 12px;
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 700;
+  background: var(--surface-raised);
+  border: 1px solid rgba(255,255,255,0.65);
+  box-shadow: var(--shadow-raised);
+  flex-shrink: 0;
+}
+
+.prg-rank-info { flex: 1; }
+
+.prg-rank-label {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  font-weight: 500;
+  margin-bottom: 5px;
+}
+
+/* ── Sección legacy (compatibilidad) ───────────────────── */
+#sec-progreso .stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.stat-card {
+  background: var(--surface-raised);
+  border: 1px solid rgba(255,255,255,0.70);
+  border-radius: var(--radius);
+  padding: 14px 12px;
+  text-align: center;
+  box-shadow: var(--shadow-raised);
+}
+
+.stat-value {
+  font-family: var(--font-mono);
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.level-roadmap {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 8px;
+  position: relative;
+}
+
+.level-roadmap::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 10%;
+  right: 10%;
+  height: 3px;
+  background: var(--surface-inset);
+  box-shadow: var(--shadow-inset);
+  border-radius: 100px;
+  z-index: 0;
+}
+
+.level-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+  z-index: 1;
+}
+
+.level-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  border: 2px solid rgba(156,190,214,0.40);
+  box-shadow: var(--shadow-raised);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  transition: all 0.3s;
+}
+
+.level-node.current .level-circle {
+  background: var(--accent-dim);
+  border-color: rgba(0,122,255,0.50);
+  color: var(--accent);
+  box-shadow: var(--shadow-raised), 0 0 14px rgba(0,122,255,0.25);
+}
+
+.level-node.done .level-circle {
+  background: rgba(48,209,88,0.12);
+  border-color: rgba(48,209,88,0.40);
+  color: var(--success);
+}
+
+.level-node-label {
+  font-family: var(--font-mono);
+  font-size: 0.45rem;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+
+.level-node.current .level-node-label { color: var(--accent); }
+.level-node.done    .level-node-label { color: var(--success); }

@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="description" content="TutorIngles — PWA personal para aprender inglés A2→C1 Cambridge CAE con SRS, gramática y simulacros.">
+<meta name="theme-color" content="#d4e8f5">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="light-content">
+<meta name="apple-mobile-web-app-title" content="TutorIngles">
+<link rel="manifest" href="manifest.json">
+<title>TutorIngles — A2→C1 Cambridge CAE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="src/css/base.css">
+<link rel="stylesheet" href="src/css/components.css">
+<link rel="stylesheet" href="src/css/sections.css">
+<link rel="stylesheet" href="src/css/animations.css">
+</head>
+<body>
+
+<!-- ── SPLASH ──────────────────────────────────────────── -->
+<div id="splash">
+  <div class="splash-inner">
+    <div class="splash-logo">EN</div>
+    <h1 class="splash-title">TUTOR<span>INGLÉS</span></h1>
+    <p class="splash-sub">A2 → C1 · Cambridge CAE</p>
+    <div class="splash-bar"><div class="splash-fill"></div></div>
+  </div>
+</div>
+
+<!-- ── AUTH SCREEN ─────────────────────────────────────── -->
+<div id="lock" style="display:none">
+  <div class="lock-card">
+    <div class="lock-logo">EN</div>
+    <h2>TUTORINGLÉS</h2>
+    <p>Introduce tu clave de acceso</p>
+    <input type="password" id="lock-input" placeholder="Clave de acceso" autocomplete="current-password">
+    <button class="btn btn-primary" onclick="unlock()">ENTRAR</button>
+    <div id="lock-err" class="lock-err"></div>
+  </div>
+</div>
+
+<!-- ── OFFLINE BANNER ──────────────────────────────────── -->
+<div id="offline-banner">⚡ SIN CONEXIÓN</div>
+
+<!-- ── TOASTS ──────────────────────────────────────────── -->
+<div id="toasts"></div>
+
+<!-- ── APP ────────────────────────────────────────────── -->
+<div id="app">
+
+  <!-- Header -->
+  <div id="hdr">
+    <div id="hdr-top">
+      <div>
+        <p id="hdr-date">HOY</p>
+        <h1>TUTOR<span>INGLÉS</span></h1>
+      </div>
+      <div id="hdr-right">
+        <span id="lvl-badge" class="badge badge-level">B1</span>
+        <span id="streak-count" class="streak-chip">🔥 0</span>
+      </div>
+    </div>
+    <div id="xp-row">
+      <span id="rank-chip" class="rank-badge">D</span>
+      <div id="xp-bar"><div id="xp-fill"></div></div>
+      <span id="xp-text">0 XP</span>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div id="cnt">
+
+    <!-- ── HOY ─────────────────────────────────────────── -->
+    <div class="sec active" id="sec-hoy">
+      <div class="sec-title">HOY</div>
+
+      <!-- Metas del día -->
+      <div class="glass-card">
+        <div class="card-title">Metas de hoy</div>
+        <div class="goal-row">
+          <div class="goal-item" id="goal-vocab">
+            <div class="goal-icon">📖</div>
+            <div class="goal-info">
+              <span class="goal-label">Vocabulario</span>
+              <span class="goal-count"><span id="vocab-done">0</span> / <span id="vocab-target">20</span></span>
+            </div>
+            <div class="goal-check" id="goal-vocab-check"></div>
+          </div>
+          <div class="goal-item" id="goal-grammar">
+            <div class="goal-icon">📝</div>
+            <div class="goal-info">
+              <span class="goal-label">Gramática</span>
+              <span class="goal-count" id="grammar-status">Pendiente</span>
+            </div>
+            <div class="goal-check" id="goal-grammar-check"></div>
+          </div>
+          <div class="goal-item" id="goal-speaking">
+            <div class="goal-icon">🗣️</div>
+            <div class="goal-info">
+              <span class="goal-label">Speaking</span>
+              <span class="goal-count" id="speaking-status">Pendiente</span>
+            </div>
+            <div class="goal-check" id="goal-speaking-check"></div>
+          </div>
+        </div>
+        <div class="progress-bar" style="margin-top:12px">
+          <div class="progress-fill" id="daily-progress-fill" style="width:0%"></div>
+        </div>
+        <div class="progress-label"><span id="daily-progress-pct">0%</span> completado</div>
+      </div>
+
+      <!-- Palabras pendientes hoy -->
+      <div class="glass-card">
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+          Repasar ahora
+          <span class="badge" id="due-count">0 pendientes</span>
+        </div>
+        <div id="hoy-due-preview">
+          <div class="empty-state">Cargando...</div>
+        </div>
+        <button class="btn btn-primary" id="btn-start-review" onclick="goTo('vocab')" style="margin-top:12px">
+          EMPEZAR REPASO →
+        </button>
+      </div>
+
+      <!-- Accesos rápidos -->
+      <div class="quick-grid">
+        <button class="quick-btn" onclick="goTo('vocab')">
+          <span class="quick-icon">📖</span>
+          <span>Vocab</span>
+        </button>
+        <button class="quick-btn" onclick="goTo('gram')">
+          <span class="quick-icon">📝</span>
+          <span>Gram</span>
+        </button>
+        <button class="quick-btn" onclick="goTo('speak')">
+          <span class="quick-icon">🗣️</span>
+          <span>Speak</span>
+        </button>
+        <button class="quick-btn" onclick="goTo('exam')">
+          <span class="quick-icon">🎯</span>
+          <span>Exam</span>
+        </button>
+      </div>
+
+      <!-- Racha semanal -->
+      <div class="glass-card">
+        <div class="card-title">Racha semanal</div>
+        <div class="streak-week" id="streak-week">
+          <span class="streak-day-dot" data-day="L">L</span>
+          <span class="streak-day-dot" data-day="M">M</span>
+          <span class="streak-day-dot" data-day="X">X</span>
+          <span class="streak-day-dot" data-day="J">J</span>
+          <span class="streak-day-dot" data-day="V">V</span>
+          <span class="streak-day-dot" data-day="S">S</span>
+          <span class="streak-day-dot" data-day="D">D</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── VOCAB ─────────────────────────────────────────── -->
+    <div class="sec" id="sec-vocab">
+      <div class="sec-title">VOCABULARIO</div>
+      <div id="vocab-content">
+        <div class="empty-state">Cargando...</div>
+      </div>
+    </div>
+
+    <!-- ── SPEAK ──────────────────────────────────────────── -->
+    <div class="sec" id="sec-speak">
+      <div class="sec-title">SPEAKING</div>
+      <div id="speak-content">
+        <div class="empty-state">Cargando...</div>
+      </div>
+    </div>
+
+    <!-- ── GRAM ───────────────────────────────────────────── -->
+    <div class="sec" id="sec-gram">
+      <div class="sec-title">GRAMÁTICA</div>
+      <div id="gram-content">
+        <div class="empty-state">Cargando...</div>
+      </div>
+    </div>
+
+    <!-- ── EXAM ───────────────────────────────────────────── -->
+    <div class="sec" id="sec-exam">
+      <div class="sec-title">SIMULACROS</div>
+      <div id="exam-content">
+        <div class="empty-state">Cargando...</div>
+      </div>
+    </div>
+
+    <!-- ── PROGRESO ──────────────────────────────────────── -->
+    <div class="sec" id="sec-progreso">
+      <div class="sec-title">PROGRESO</div>
+      <div id="progress-content">
+        <div class="empty-state">Cargando...</div>
+      </div>
+    </div>
+
+  </div><!-- /cnt -->
+
+  <!-- Nav -->
+  <nav id="nav">
+    <div id="nav-lens"></div>
+    <button class="nb active" data-sec="hoy"     onclick="goTo('hoy')">    <span class="ni">◎</span>HOY</button>
+    <button class="nb"        data-sec="vocab"   onclick="goTo('vocab')">  <span class="ni">📖</span>VOCAB</button>
+    <button class="nb"        data-sec="speak"   onclick="goTo('speak')">  <span class="ni">🗣</span>SPEAK</button>
+    <button class="nb"        data-sec="gram"    onclick="goTo('gram')">   <span class="ni">📝</span>GRAM</button>
+    <button class="nb"        data-sec="exam"    onclick="goTo('exam')">   <span class="ni">🎯</span>EXAM</button>
+    <button class="nb"        data-sec="progreso" onclick="goTo('progreso')"><span class="ni">📊</span>PROG</button>
+  </nav>
+
+</div><!-- /app -->
+
+<script src="src/js/app.js"></script>
+<script src="src/js/vocab.js"></script>
+<script src="src/js/speak.js"></script>
+<script src="src/js/grammar.js"></script>
+<script src="src/js/exam.js"></script>
+<script src="src/js/progress.js"></script>
+</body>
+</html>
