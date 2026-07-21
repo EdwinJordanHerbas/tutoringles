@@ -13,6 +13,16 @@ const EXAM_SECTIONS = [
   { id: 'speaking',  icon: '🗣️', name: 'Speaking',  desc: '4 parts · paired exam · 15 min' },
 ];
 
+// Partes auto-corregibles del Use of English (banco exam_questions)
+const UOE_PARTS = [
+  { id: 'mc_cloze',                short: 'MC Cloze',     desc: 'Elige la palabra correcta (A-D)' },
+  { id: 'open_cloze',              short: 'Open Cloze',   desc: 'Escribe la palabra que falta' },
+  { id: 'word_formation',          short: 'Word Form',    desc: 'Transforma la palabra dada' },
+  { id: 'key_word_transformation', short: 'Key Word',     desc: 'Reformula con la palabra clave' },
+];
+
+let _quiz = { part: null, questions: [] };
+
 // ── INIT ─────────────────────────────────────────────────
 async function initExam() {
   const container = document.getElementById('exam-content');
@@ -43,6 +53,19 @@ function renderExamDashboard() {
   });
 
   container.innerHTML = `
+    <div class="glass-card-accent anim-fade-in" style="margin-bottom:14px">
+      <div class="card-title">PRACTICAR · USE OF ENGLISH</div>
+      <p style="font-size:0.72rem;color:var(--text-3);margin-bottom:10px">Test interactivo con corrección automática. Elige una parte:</p>
+      <div class="uoe-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        ${UOE_PARTS.map(p => `
+          <button class="quick-btn" style="align-items:flex-start;text-align:left;padding:12px" onclick="startQuiz('${p.id}')">
+            <span style="font-size:0.8rem;font-weight:700;color:var(--text)">${p.short}</span>
+            <span style="font-size:0.62rem;color:var(--text-3);line-height:1.3">${p.desc}</span>
+          </button>
+        `).join('')}
+      </div>
+    </div>
+
     <div class="glass-card anim-fade-in" style="margin-bottom:14px">
       <div class="card-title">SECCIONES CAE</div>
       <div class="exam-sections">
@@ -151,6 +174,128 @@ function getExamTips(section) {
     speaking:  '• En Part 2 habla 1 minuto sin parar — practica en voz alta<br>• Usa language chunks: "One aspect I find interesting is..."<br>• Pregunta la opinión de tu compañero en la discusión<br>• No te corrijas a mitad de frase — sigue fluyendo'
   };
   return tips[section] || '';
+}
+
+// ══════════════════════ QUIZ INTERACTIVO ══════════════════════
+const _esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+async function startQuiz(part) {
+  const container = document.getElementById('exam-content');
+  container.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+  try {
+    const qs = await apiGet(`/exam-questions/quiz?part=${part}&n=8`);
+    if (!qs || !qs.length) {
+      container.innerHTML = '<button class="btn btn-subtle btn-sm" onclick="renderExamDashboard()" style="margin-bottom:14px">← VOLVER</button><div class="empty-state">No hay preguntas de esta parte todavía.</div>';
+      return;
+    }
+    _quiz = { part, questions: qs };
+    renderQuiz();
+  } catch (e) {
+    container.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
+  }
+}
+
+// Pinta el enunciado de una pregunta según su tipo.
+function quizQuestionHtml(q, i) {
+  const meta = UOE_PARTS.find((p) => p.id === q.part) || {};
+  let body = '';
+
+  if (q.part === 'mc_cloze') {
+    const prompt = _esc(q.prompt).replace('____', '<span class="quiz-gap">____</span>');
+    const opts = Array.isArray(q.options) ? q.options : [];
+    body = `<p class="quiz-prompt">${prompt}</p>
+      <div class="quiz-options">
+        ${opts.map((o) => `
+          <label class="quiz-opt">
+            <input type="radio" name="q${q.id}" value="${_esc(o)}"> <span>${_esc(o)}</span>
+          </label>`).join('')}
+      </div>`;
+  } else if (q.part === 'key_word_transformation') {
+    // Formato: "original" || segunda con ____ [KEY]
+    const [orig, rest = ''] = q.prompt.split('||');
+    const keyMatch = rest.match(/\[([^\]]+)\]/);
+    const key = keyMatch ? keyMatch[1] : (q.given_word || '');
+    const second = _esc(rest.replace(/\[[^\]]+\]/, '').trim()).replace('____', '<span class="quiz-gap">____</span>');
+    body = `<p class="quiz-prompt" style="color:var(--text-3)">${_esc(orig.replace(/\|\|/g, '').trim())}</p>
+      <p class="quiz-prompt">${second}</p>
+      <div class="quiz-hint">Palabra clave (no la cambies): <strong>${_esc(key)}</strong> · usa 3-6 palabras</div>
+      <input class="field-input quiz-input" type="text" data-qid="${q.id}" placeholder="las palabras que faltan" autocapitalize="none" autocomplete="off">`;
+  } else {
+    // open_cloze y word_formation
+    const prompt = _esc(q.prompt).replace('____', '<span class="quiz-gap">____</span>');
+    body = `<p class="quiz-prompt">${prompt}</p>
+      ${q.given_word ? `<div class="quiz-hint">Base: <strong>${_esc(q.given_word)}</strong></div>` : ''}
+      <input class="field-input quiz-input" type="text" data-qid="${q.id}" placeholder="tu respuesta" autocapitalize="none" autocomplete="off">`;
+  }
+
+  return `<div class="glass-card quiz-q" style="margin-bottom:10px">
+    <div style="font-size:0.62rem;color:var(--text-3);letter-spacing:1px;margin-bottom:8px">PREGUNTA ${i + 1} · ${(meta.short || '').toUpperCase()}</div>
+    ${body}
+  </div>`;
+}
+
+function renderQuiz() {
+  const container = document.getElementById('exam-content');
+  const meta = UOE_PARTS.find((p) => p.id === _quiz.part) || {};
+  container.innerHTML = `
+    <button class="btn btn-subtle btn-sm" onclick="renderExamDashboard()" style="margin-bottom:14px">← SALIR</button>
+    <div class="glass-card-accent" style="margin-bottom:12px">
+      <div class="card-title">${(meta.short || '').toUpperCase()}</div>
+      <p style="font-size:0.72rem;color:var(--text-3)">${meta.desc || ''} · ${_quiz.questions.length} preguntas</p>
+    </div>
+    ${_quiz.questions.map((q, i) => quizQuestionHtml(q, i)).join('')}
+    <button class="btn btn-primary" onclick="submitQuiz()" style="margin-top:6px">CORREGIR →</button>
+  `;
+}
+
+async function submitQuiz() {
+  const answers = _quiz.questions.map((q) => {
+    let response = '';
+    if (q.part === 'mc_cloze') {
+      response = document.querySelector(`input[name="q${q.id}"]:checked`)?.value || '';
+    } else {
+      response = document.querySelector(`.quiz-input[data-qid="${q.id}"]`)?.value.trim() || '';
+    }
+    return { id: q.id, response };
+  });
+
+  const container = document.getElementById('exam-content');
+  container.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+  try {
+    const res = await apiPost('/exam-quiz/grade', { answers });
+    // El Use of English cuenta como parte del paper de Reading en el CAE.
+    await apiPost('/exam-attempts', { section: 'reading', score: res.score, max_score: 100, notes: `Use of English · ${_quiz.part}` });
+    await apiPost('/study-sessions', { type: 'exam', score: res.score });
+    showXpPop(25);
+    renderQuizResults(res);
+  } catch (e) {
+    container.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
+  }
+}
+
+function renderQuizResults(res) {
+  const container = document.getElementById('exam-content');
+  const color = getScoreColor(res.score);
+  container.innerHTML = `
+    <button class="btn btn-subtle btn-sm" onclick="renderExamDashboard()" style="margin-bottom:14px">← VOLVER</button>
+    <div class="glass-card-accent" style="margin-bottom:14px;text-align:center">
+      <div style="font-family:var(--font-mono);font-size:2.4rem;font-weight:700;color:${color}">${res.score}%</div>
+      <div style="font-size:0.68rem;color:var(--text-3);letter-spacing:1px">${res.aciertos} / ${res.total} CORRECTAS</div>
+    </div>
+    ${res.detail.map((d) => `
+      <div class="glass-card" style="margin-bottom:8px;border-left:3px solid ${d.correct ? 'var(--success)' : 'var(--danger)'}">
+        <p style="font-size:0.78rem;color:var(--text-2);margin-bottom:6px">${_esc((d.prompt || '').replace(/\|\|/g, ' → ').replace(/\[[^\]]+\]/, ''))}</p>
+        <div style="font-size:0.74rem;display:flex;flex-wrap:wrap;gap:6px 14px">
+          <span style="color:${d.correct ? 'var(--success)' : 'var(--danger)'}">${d.correct ? '✓' : '✗'} Tu respuesta: <strong>${_esc(d.your) || '—'}</strong></span>
+          ${!d.correct ? `<span style="color:var(--success)">Correcta: <strong>${_esc(d.answer)}</strong></span>` : ''}
+        </div>
+        ${d.explanation ? `<p style="font-size:0.68rem;color:var(--text-3);margin-top:6px;line-height:1.5">${_esc(d.explanation)}</p>` : ''}
+      </div>
+    `).join('')}
+    <button class="btn btn-primary" onclick="startQuiz('${_quiz.part}')" style="margin-top:6px">OTRA RONDA →</button>
+  `;
+  // Refrescar historial subyacente
+  apiGet('/exam-attempts').then((a) => { _examAttempts = a || []; }).catch(() => {});
 }
 
 async function saveExamResult() {

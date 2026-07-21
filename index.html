@@ -62,6 +62,8 @@
       <div id="hdr-right">
         <span id="lvl-badge" class="badge badge-level">B1</span>
         <span id="streak-count" class="streak-chip">🔥 0</span>
+        <button id="settings-btn" onclick="goTo('ajustes')" aria-label="Ajustes"
+          style="background:none;border:none;font-size:1.1rem;cursor:pointer;padding:4px;color:var(--text-3)">⚙</button>
       </div>
     </div>
     <div id="xp-row">
@@ -77,6 +79,11 @@
     <!-- ── HOY ─────────────────────────────────────────── -->
     <div class="sec active" id="sec-hoy">
       <div class="sec-title">HOY</div>
+
+      <!-- Plan de 30 días -->
+      <div class="glass-card-accent" id="plan-card">
+        <div class="empty-state" style="padding:12px 0">Cargando plan…</div>
+      </div>
 
       <!-- Metas del día -->
       <div class="glass-card">
@@ -202,6 +209,14 @@
       </div>
     </div>
 
+    <!-- ── AJUSTES ───────────────────────────────────────── -->
+    <div class="sec" id="sec-ajustes">
+      <div class="sec-title">AJUSTES</div>
+      <div id="settings-content">
+        <div class="empty-state">Cargando...</div>
+      </div>
+    </div>
+
   </div><!-- /cnt -->
 
   <!-- Nav -->
@@ -218,10 +233,12 @@
 </div><!-- /app -->
 
 <script src="src/js/app.js"></script>
+<script src="src/js/plan.js"></script>
 <script src="src/js/vocab.js"></script>
 <script src="src/js/speak.js"></script>
 <script src="src/js/grammar.js"></script>
 <script src="src/js/exam.js"></script>
 <script src="src/js/progress.js"></script>
+<script src="src/js/settings.js"></script>
 </body>
 </html>

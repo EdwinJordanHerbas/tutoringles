@@ -21,6 +21,12 @@ const SPEAKING_PHRASES = [
 let _currentPhrase = null;
 let _isRecording   = false;
 let _speakInited   = false;
+let _recognition   = null;
+let _lastTranscript = '';
+let _lastScore     = null;
+
+// ¿Soporta el navegador reconocimiento de voz? (Chrome/Edge/Android sí; iOS Safari limitado)
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 // ── INIT ─────────────────────────────────────────────────
 function initSpeak() {
@@ -44,10 +50,13 @@ function renderSpeakSection() {
       <div style="font-size:0.65rem;color:var(--text-3);margin-bottom:16px;font-family:var(--font-mono)">
         TOPIC: ${_currentPhrase.topic.toUpperCase()}
       </div>
-      <div style="text-align:center;margin-bottom:20px">
+      <div style="display:flex;justify-content:center;gap:20px;align-items:center;margin-bottom:14px">
+        <button class="btn btn-subtle" onclick="speakPhrase()" title="Escuchar" style="min-width:auto;padding:12px 16px">🔊 ESCUCHAR</button>
         <button class="speak-record-btn" id="speak-record-btn" onclick="toggleRecording()">🎙️</button>
-        <div style="font-family:var(--font-mono);font-size:0.55rem;color:var(--text-3);margin-top:10px;letter-spacing:2px" id="speak-status">
-          TOCA PARA GRABAR
+      </div>
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="font-family:var(--font-mono);font-size:0.55rem;color:var(--text-3);letter-spacing:2px" id="speak-status">
+          ${SpeechRec ? 'TOCA EL MICRO Y LEE LA FRASE' : 'ESCUCHA Y REPITE EN VOZ ALTA'}
         </div>
       </div>
       <div class="speak-transcript" id="speak-transcript" style="display:none"></div>
@@ -78,37 +87,92 @@ function renderSpeakSection() {
   loadSpeakHistory();
 }
 
+// Reproduce la frase con la voz del sistema (síntesis de voz).
+function speakPhrase() {
+  if (!('speechSynthesis' in window) || !_currentPhrase) {
+    toast('Tu navegador no permite reproducir voz', 'error');
+    return;
+  }
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(_currentPhrase.phrase);
+  u.lang = 'en-GB';
+  u.rate = 0.92;
+  const enVoice = window.speechSynthesis.getVoices().find((v) => /en[-_]GB/i.test(v.lang)) ||
+                  window.speechSynthesis.getVoices().find((v) => /^en/i.test(v.lang));
+  if (enVoice) u.voice = enVoice;
+  window.speechSynthesis.speak(u);
+}
+
+// Compara lo dicho con la frase objetivo → % de palabras acertadas.
+function scoreSpeech(target, said) {
+  const clean = (s) => s.toLowerCase().replace(/[^a-z0-9\s']/g, '').split(/\s+/).filter(Boolean);
+  const t = clean(target), s = new Set(clean(said));
+  if (!t.length) return 0;
+  const hit = t.filter((w) => s.has(w)).length;
+  return Math.round((hit / t.length) * 100);
+}
+
 function toggleRecording() {
-  // TODO: Implementar Web Speech API / MediaRecorder
-  // Por ahora simula el flujo de grabación
-  _isRecording = !_isRecording;
   const btn    = document.getElementById('speak-record-btn');
   const status = document.getElementById('speak-status');
+  const transcript = document.getElementById('speak-transcript');
 
-  if (_isRecording) {
+  // Sin reconocimiento de voz: modo manual (escucha y repite, autopuntúa).
+  if (!SpeechRec) {
+    transcript.style.display = 'block';
+    transcript.innerHTML = `
+      <div style="font-family:var(--font-mono);font-size:0.55rem;color:var(--text-3);margin-bottom:6px;letter-spacing:2px">MODO SIN MICRO</div>
+      <div style="color:var(--text-2);font-size:0.8rem">Este navegador no transcribe voz (iOS lo limita). Escucha con 🔊, repite en alto y puntúate al guardar.</div>`;
+    document.getElementById('speak-actions').style.display = 'block';
+    _lastTranscript = '[repetido en voz alta]';
+    _lastScore = null;
+    return;
+  }
+
+  if (_isRecording) { _recognition?.stop(); return; }
+
+  _recognition = new SpeechRec();
+  _recognition.lang = 'en-GB';
+  _recognition.interimResults = false;
+  _recognition.maxAlternatives = 1;
+
+  _recognition.onstart = () => {
+    _isRecording = true;
     btn.classList.add('recording');
     btn.textContent = '⏹';
-    status.textContent = 'GRABANDO… TOCA PARA PARAR';
-  } else {
+    status.textContent = 'ESCUCHANDO… HABLA AHORA';
+  };
+  _recognition.onerror = (e) => {
+    status.textContent = e.error === 'not-allowed' ? 'PERMISO DE MICRO DENEGADO' : 'ERROR: ' + e.error;
+    _isRecording = false;
     btn.classList.remove('recording');
     btn.textContent = '🎙️';
-    status.textContent = 'REPRODUCIENDO…';
+  };
+  _recognition.onend = () => {
+    _isRecording = false;
+    btn.classList.remove('recording');
+    btn.textContent = '🎙️';
+    if (status.textContent.includes('ESCUCHANDO')) status.textContent = 'TOCA EL MICRO PARA REPETIR';
+  };
+  _recognition.onresult = (ev) => {
+    const said = ev.results[0][0].transcript;
+    const score = scoreSpeech(_currentPhrase.phrase, said);
+    _lastTranscript = said;
+    _lastScore = score;
+    const color = score >= 80 ? 'var(--success)' : score >= 50 ? 'var(--warning)' : 'var(--danger)';
+    transcript.style.display = 'block';
+    transcript.innerHTML = `
+      <div style="font-family:var(--font-mono);font-size:0.55rem;color:var(--text-3);margin-bottom:6px;letter-spacing:2px">TE HE OÍDO:</div>
+      <div style="color:var(--text-2)">"${said}"</div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--surface-2);display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:0.7rem;color:var(--text-3)">Precisión</span>
+        <span style="font-family:var(--font-mono);font-weight:700;color:${color}">${score}%</span>
+      </div>`;
+    document.getElementById('speak-actions').style.display = 'block';
+  };
 
-    // Simular transcript (cuando se integre Web Speech API, aquí va el resultado real)
-    setTimeout(() => {
-      const transcript = document.getElementById('speak-transcript');
-      transcript.style.display = 'block';
-      transcript.innerHTML = `
-        <div style="font-family:var(--font-mono);font-size:0.55rem;color:var(--text-3);margin-bottom:6px;letter-spacing:2px">TU RESPUESTA:</div>
-        <div style="font-style:italic;color:var(--text-2)">[Transcripción de voz — próximamente con Web Speech API]</div>
-        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--surface-2);font-size:0.7rem;color:var(--text-3)">
-          Puntúate tú mismo al pulsar Guardar
-        </div>
-      `;
-      document.getElementById('speak-actions').style.display = 'block';
-      status.textContent = 'TOCA PARA GRABAR DE NUEVO';
-    }, 800);
-  }
+  try { _recognition.start(); }
+  catch { status.textContent = 'NO SE PUDO INICIAR EL MICRO'; }
 }
 
 function nextPhrase() {
@@ -121,8 +185,8 @@ async function saveSpeak() {
   try {
     await apiPost('/speaking-practice', {
       phrase_en: _currentPhrase.phrase,
-      user_transcript: '[grabado]',
-      score: null,
+      user_transcript: _lastTranscript || '[grabado]',
+      score: _lastScore,
       notes: _currentPhrase.topic
     });
     // Marcar meta de speaking como completada
@@ -138,8 +202,24 @@ async function saveSpeak() {
 }
 
 async function loadSpeakHistory() {
-  // TODO: Endpoint específico de speaking-practice por fecha
   const hist = document.getElementById('speak-history');
   if (!hist) return;
-  hist.innerHTML = '<div class="empty-state" style="padding:12px 0">Historial disponible próximamente</div>';
+  try {
+    const rows = await apiGet('/speaking-practice');
+    if (!rows || !rows.length) {
+      hist.innerHTML = '<div class="empty-state" style="padding:12px 0">Aún no has practicado. ¡Empieza arriba!</div>';
+      return;
+    }
+    hist.innerHTML = rows.slice(0, 6).map((r) => {
+      const sc = r.score != null
+        ? `<span style="font-family:var(--font-mono);font-weight:700;color:${r.score >= 80 ? 'var(--success)' : r.score >= 50 ? 'var(--warning)' : 'var(--danger)'}">${r.score}%</span>`
+        : '<span style="font-size:0.65rem;color:var(--text-3)">—</span>';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--surface-2)">
+        <span style="font-size:0.72rem;color:var(--text-2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">"${r.phrase_en}"</span>
+        ${sc}
+      </div>`;
+    }).join('');
+  } catch {
+    hist.innerHTML = '<div class="empty-state" style="padding:12px 0">No se pudo cargar el historial</div>';
+  }
 }

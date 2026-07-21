@@ -104,7 +104,8 @@ const SECTIONS  = ['hoy', 'vocab', 'speak', 'gram', 'exam', 'progreso'];
 const NAV_COUNT = SECTIONS.length;
 
 function goTo(sec) {
-  if (!SECTIONS.includes(sec)) return;
+  // 'ajustes' es válida pero no está en la nav inferior (se abre por el ⚙).
+  if (!SECTIONS.includes(sec) && sec !== 'ajustes') return;
   _activeSection = sec;
 
   // Secciones
@@ -125,7 +126,7 @@ function goTo(sec) {
   });
 
   // Disparar render de sección si existe
-  const renders = { vocab: renderVocab, speak: renderSpeak, gram: renderGrammar, exam: renderExam, progreso: renderProgress };
+  const renders = { vocab: renderVocab, speak: renderSpeak, gram: renderGrammar, exam: renderExam, progreso: renderProgress, ajustes: renderSettings };
   if (renders[sec]) renders[sec]();
 }
 
@@ -230,6 +231,9 @@ async function loadHoyData() {
     console.warn('loadHoyData error:', e.message);
   }
 
+  // Plan de 30 días
+  if (typeof loadPlanToday === 'function') loadPlanToday();
+
   // Racha semanal (últimos 7 días pintados)
   loadStreakWeek();
 }
@@ -272,6 +276,7 @@ function renderSpeak()    { if (typeof initSpeak    === 'function') initSpeak();
 function renderGrammar()  { if (typeof initGrammar  === 'function') initGrammar();  }
 function renderExam()     { if (typeof initExam     === 'function') initExam();     }
 function renderProgress() { if (typeof initProgress === 'function') initProgress(); }
+function renderSettings() { if (typeof initSettings === 'function') initSettings(); }
 
 // ── SERVICE WORKER ──────────────────────────────────────
 function registerSW() {

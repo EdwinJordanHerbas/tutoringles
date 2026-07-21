@@ -3,7 +3,7 @@
 //  · Estáticos (css/js/fuentes):     cache-first con actualización en segundo plano
 //  · Navegación (index.html):        network-first con fallback a caché (offline)
 //  · API (/words, /stats, etc.):     siempre red — nunca cachear datos dinámicos
-const VERSION     = 'tutoringles-v1';
+const VERSION     = 'tutoringles-v2';
 const STATIC_CACHE = `${VERSION}-static`;
 
 const PRECACHE = [
@@ -15,18 +15,21 @@ const PRECACHE = [
   '/src/css/sections.css',
   '/src/css/animations.css',
   '/src/js/app.js',
+  '/src/js/plan.js',
   '/src/js/vocab.js',
   '/src/js/speak.js',
   '/src/js/grammar.js',
   '/src/js/exam.js',
-  '/src/js/progress.js'
+  '/src/js/progress.js',
+  '/src/js/settings.js'
 ];
 
 // Rutas de API — nunca pasan por caché
 const API_PREFIXES = [
   '/words', '/user-words', '/grammar-topics', '/grammar-progress',
   '/study-sessions', '/daily-goals', '/speaking-practice',
-  '/exam-attempts', '/stats', '/config', '/auth', '/health'
+  '/exam-attempts', '/exam-questions', '/exam-quiz', '/curriculum',
+  '/plan', '/stats', '/config', '/auth', '/health'
 ];
 
 self.addEventListener('install', (event) => {

@@ -393,6 +393,13 @@ app.put('/daily-goals/:date', async (req, res) => {
 // ════════════════════════════════════════════════════════
 // SPEAKING
 // ════════════════════════════════════════════════════════
+app.get('/speaking-practice', async (req, res) => {
+  try {
+    const { rows } = await db('SELECT * FROM speaking_practice ORDER BY created_at DESC LIMIT 20');
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.post('/speaking-practice', async (req, res) => {
   const { date, phrase_en, user_transcript, score, notes } = req.body;
   if (!phrase_en) return res.status(400).json({ error: 'phrase_en requerido' });
@@ -502,6 +509,100 @@ app.put('/config/:key', async (req, res) => {
       [req.params.key, String(value)]
     );
     res.json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════════════════════════════
+// EXAMEN INTERACTIVO (Use of English auto-corregible)
+// ════════════════════════════════════════════════════════
+// Devuelve N preguntas al azar de una parte, SIN la respuesta.
+app.get('/exam-questions/quiz', async (req, res) => {
+  const part = req.query.part;
+  const n = Math.min(parseInt(req.query.n || '8', 10), 30);
+  try {
+    const params = [];
+    let where = '';
+    if (part) { where = 'WHERE part=$1'; params.push(part); }
+    const { rows } = await db(
+      `SELECT id, part, level, prompt, options, given_word
+         FROM exam_questions ${where}
+         ORDER BY RANDOM() LIMIT ${n}`, params
+    );
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Normaliza para comparar: minúsculas, sin espacios de sobra.
+const norm = (s) => String(s ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+// Corrige un intento en el servidor y devuelve el detalle por pregunta.
+app.post('/exam-quiz/grade', async (req, res) => {
+  const answers = Array.isArray(req.body?.answers) ? req.body.answers : [];
+  if (!answers.length) return res.status(400).json({ error: 'answers requerido' });
+  try {
+    const ids = answers.map((a) => a.id);
+    const { rows } = await db('SELECT * FROM exam_questions WHERE id = ANY($1)', [ids]);
+    const byId = Object.fromEntries(rows.map((q) => [q.id, q]));
+    const detail = answers.map((a) => {
+      const q = byId[a.id];
+      if (!q) return { id: a.id, correct: false, error: 'no encontrada' };
+      const correct = norm(a.response) === norm(q.answer);
+      return {
+        id: q.id, part: q.part, prompt: q.prompt,
+        your: a.response ?? '', answer: q.answer,
+        correct, explanation: q.explanation,
+      };
+    });
+    const aciertos = detail.filter((d) => d.correct).length;
+    const score = Math.round((aciertos / detail.length) * 100);
+    res.json({ total: detail.length, aciertos, score, detail });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════════════════════════════
+// PLAN DE 30 DÍAS
+// ════════════════════════════════════════════════════════
+app.get('/curriculum', async (req, res) => {
+  try {
+    const { rows } = await db(
+      `SELECT c.*, g.title AS grammar_title
+         FROM curriculum c
+         LEFT JOIN grammar_topics g ON g.id = c.grammar_topic_id
+         ORDER BY c.day`
+    );
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// El día de hoy según la fecha de inicio del plan (config plan_start_date).
+app.get('/curriculum/today', async (req, res) => {
+  try {
+    const { rows: cfg } = await db("SELECT value FROM config WHERE key='plan_start_date'");
+    const start = cfg[0]?.value || null;
+    let day = 1, started = false;
+    if (start) {
+      started = true;
+      const ms = new Date(todayStr()) - new Date(start);
+      day = Math.min(30, Math.max(1, Math.floor(ms / 86400000) + 1));
+    }
+    const { rows } = await db(
+      `SELECT c.*, g.title AS grammar_title, g.content_html AS grammar_html
+         FROM curriculum c
+         LEFT JOIN grammar_topics g ON g.id = c.grammar_topic_id
+         WHERE c.day=$1`, [day]
+    );
+    res.json({ started, day, plan_start_date: start, ...(rows[0] || {}) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Arranca (o reinicia) el plan hoy.
+app.post('/plan/start', async (req, res) => {
+  try {
+    await db(
+      `INSERT INTO config (key, value) VALUES ('plan_start_date', $1)
+       ON CONFLICT (key) DO UPDATE SET value=$1`, [todayStr()]
+    );
+    res.json({ started: true, plan_start_date: todayStr() });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
