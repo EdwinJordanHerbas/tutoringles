@@ -133,4 +133,12 @@ INSERT INTO words (word, translation, example_sentence, level, category) VALUES
   ('Bear in mind','tener en cuenta',     'Bear in mind that the exam lasts four hours.',            'B1', 'idiom')
 ON CONFLICT DO NOTHING;
 
+-- ── SEMILLA DE user_words ────────────────────────────────────────
+-- Sin esto, las palabras existen en `words` pero no entran en la cola de
+-- repaso (que lee user_words), así que "Repasar ahora" arranca vacío.
+-- Toda palabra sin ficha SRS obtiene una, en estado 'new' y vencida hoy.
+INSERT INTO user_words (word_id)
+SELECT w.id FROM words w
+WHERE NOT EXISTS (SELECT 1 FROM user_words uw WHERE uw.word_id = w.id);
+
 SELECT 'TutorIngles Migration OK · ' || NOW() AS status;

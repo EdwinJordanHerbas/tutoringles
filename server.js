@@ -66,6 +66,29 @@ app.get('/health', async (req, res) => {
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 
+// Recalcula la racha del día indicado y actualiza streak_max en config.
+// Un día "cuenta" si tiene alguna meta hecha (vocab, gramática o speaking).
+// La racha = racha de ayer + 1 si ayer contó; si hubo hueco, vuelve a 1.
+// Antes no existía: el 🔥 se quedaba clavado en 0 para siempre.
+async function recomputeStreak(date) {
+  const { rows } = await db('SELECT * FROM daily_goals WHERE date=$1', [date]);
+  const t = rows[0];
+  const activo = !!t && (Number(t.vocab_done) > 0 || t.grammar_done === true || t.speaking_done === true);
+  if (!activo) return t ? Number(t.streak) || 0 : 0;
+
+  const { rows: ayer } = await db(
+    "SELECT streak FROM daily_goals WHERE date = ($1::date - INTERVAL '1 day')", [date]
+  );
+  const streak = (ayer.length ? Number(ayer[0].streak) || 0 : 0) + 1;
+  await db('UPDATE daily_goals SET streak=$2 WHERE date=$1', [date, streak]);
+  await db(
+    `INSERT INTO config (key, value) VALUES ('streak_max', $1)
+     ON CONFLICT (key) DO UPDATE SET value = GREATEST(COALESCE(config.value::int, 0), $2)::text`,
+    [String(streak), streak]
+  );
+  return streak;
+}
+
 // ════════════════════════════════════════════════════════
 // MOCK MODE (?mock=1 intercepta todos los endpoints)
 // Devuelve datos de ejemplo para trabajar sin DB.
@@ -338,14 +361,31 @@ app.post('/daily-goals', async (req, res) => {
 });
 
 app.put('/daily-goals/:date', async (req, res) => {
-  const fields = req.body;
-  const sets = Object.keys(fields).map((k, i) => `${k}=$${i + 2}`).join(',');
-  const vals = [req.params.date, ...Object.values(fields)];
+  const date = req.params.date;
+  const fields = req.body || {};
+  // Whitelist: nunca dejamos que el cliente escriba streak a mano, lo
+  // calcula el servidor. Antes el UPDATE fallaba con 404 si no había fila
+  // (y el front nunca creaba una), así que las metas no se guardaban jamás.
+  const allowed = ['vocab_target', 'vocab_done', 'grammar_done', 'speaking_done'];
+  const keys = Object.keys(fields).filter((k) => allowed.includes(k));
   try {
-    const { rows } = await db(
-      `UPDATE daily_goals SET ${sets} WHERE date=$1 RETURNING *`, vals
+    // 1. Asegurar la fila del día (upsert vacío con el target por defecto)
+    const { rows: cfg } = await db("SELECT value FROM config WHERE key='daily_vocab_target'");
+    const target = parseInt(cfg[0]?.value || '20', 10);
+    await db(
+      `INSERT INTO daily_goals (date, vocab_target) VALUES ($1,$2)
+       ON CONFLICT (date) DO NOTHING`,
+      [date, target]
     );
-    if (!rows.length) return res.status(404).json({ error: 'No encontrado' });
+    // 2. Aplicar solo los campos recibidos
+    if (keys.length) {
+      const sets = keys.map((k, i) => `${k}=$${i + 2}`).join(',');
+      const vals = [date, ...keys.map((k) => fields[k])];
+      await db(`UPDATE daily_goals SET ${sets} WHERE date=$1`, vals);
+    }
+    // 3. Recalcular la racha con el estado ya actualizado
+    await recomputeStreak(date);
+    const { rows } = await db('SELECT * FROM daily_goals WHERE date=$1', [date]);
     res.json(rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -394,28 +434,50 @@ app.post('/exam-attempts', async (req, res) => {
 // ════════════════════════════════════════════════════════
 app.get('/stats', async (req, res) => {
   try {
-    const [xpQ, masteredQ, streakQ, sessWeekQ, examQ] = await Promise.all([
+    const [xpQ, masteredQ, streakQ, sessWeekQ, examQ, sessTotalQ, wordsTotalQ, bestExamQ, examCfgQ, maxStreakQ] = await Promise.all([
       db("SELECT value FROM config WHERE key='xp_total'"),
       db("SELECT COUNT(*) AS cnt FROM user_words WHERE status='mastered'"),
       db('SELECT streak FROM daily_goals ORDER BY date DESC LIMIT 1'),
       db(`SELECT COUNT(*) AS cnt FROM study_sessions WHERE date >= CURRENT_DATE - INTERVAL '7 days'`),
-      db('SELECT section, AVG(score::float/max_score*100) AS avg_pct FROM exam_attempts GROUP BY section')
+      db('SELECT section, AVG(score::float/max_score*100) AS avg_pct FROM exam_attempts GROUP BY section'),
+      db('SELECT COUNT(*) AS cnt FROM study_sessions'),
+      db('SELECT COUNT(*) AS cnt FROM user_words'),
+      db('SELECT MAX(score::float/max_score*100) AS best, COUNT(*) AS done FROM exam_attempts'),
+      db("SELECT value FROM config WHERE key='target_exam_date'"),
+      db('SELECT MAX(streak) AS m FROM daily_goals')
     ]);
-    const xp      = parseInt(xpQ.rows[0]?.value || '0', 10);
-    const mastered = parseInt(masteredQ.rows[0]?.cnt || '0', 10);
-    const streak   = parseInt(streakQ.rows[0]?.streak || '0', 10);
-    const sessWeek = parseInt(sessWeekQ.rows[0]?.cnt || '0', 10);
+    const xp        = parseInt(xpQ.rows[0]?.value || '0', 10);
+    const mastered  = parseInt(masteredQ.rows[0]?.cnt || '0', 10);
+    const streak    = parseInt(streakQ.rows[0]?.streak || '0', 10);
+    const sessWeek  = parseInt(sessWeekQ.rows[0]?.cnt || '0', 10);
+    const sessTotal = parseInt(sessTotalQ.rows[0]?.cnt || '0', 10);
+    const wordsTotal = parseInt(wordsTotalQ.rows[0]?.cnt || '0', 10);
+    const examsDone = parseInt(bestExamQ.rows[0]?.done || '0', 10);
+    const bestExam  = bestExamQ.rows[0]?.best != null ? Math.round(bestExamQ.rows[0].best) : null;
     // Nivel estimado basado en XP
     let estimated_level = 'A2';
     if (xp >= 5000)       estimated_level = 'C1';
     else if (xp >= 2000)  estimated_level = 'B2';
     else if (xp >= 500)   estimated_level = 'B1';
-    // Racha máxima
-    const { rows: maxStreak } = await db('SELECT MAX(streak) AS m FROM daily_goals');
-    const streak_max = parseInt(maxStreak[0]?.m || '0', 10);
+    const streak_max = parseInt(maxStreakQ.rows[0]?.m || '0', 10);
     const exam_scores = {};
     for (const r of examQ.rows) exam_scores[r.section] = Math.round(r.avg_pct);
-    res.json({ xp_total: xp, streak, streak_max, words_mastered: mastered, estimated_level, sessions_this_week: sessWeek, exam_scores });
+    // % de vocabulario dominado sobre el que se está estudiando
+    const vocab_pct = wordsTotal > 0 ? Math.round((mastered / wordsTotal) * 100) : 0;
+    res.json({
+      xp_total: xp,
+      streak, streak_max,
+      words_mastered: mastered,
+      words_total: wordsTotal,
+      vocab_pct,
+      estimated_level,
+      sessions_this_week: sessWeek,
+      sessions_total: sessTotal,
+      exams_done: examsDone,
+      best_exam_score: bestExam,
+      exam_scores,
+      exam_date: examCfgQ.rows[0]?.value || null,
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
