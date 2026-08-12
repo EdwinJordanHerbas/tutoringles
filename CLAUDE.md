@@ -303,6 +303,37 @@ modelo empieza a comerse pausas.**
 **Estado a 2-ago-2026: las 148 frases tienen audio real** (3,1 MB en `src/audio/`), verificadas
 una a una: ritmo entre 7,8 y 26,5 letras/s, sin duplicados y con `index.json` cuadrando.
 
+## Las cinco secciones que llevaban a cero (12-ago-2026)
+
+Situaciones, speaking, writing, exámenes y gramática seguían **sin una sola fila de progreso**
+con todo el contenido construido desde julio. **No era falta de navegación**: TRABAJO y HABLAR
+están en la barra, a un toque. Eran tres cosas, y la primera es la que más enseña:
+
+- **La app marcaba el speaking como hecho sin que se hablara.** En `/sesion-diaria/fin` estaba
+  `speaking_done = frase_hecha`: *ver* una frase del sector —leerla, sin micrófono— dejaba la meta
+  de HABLAR en "Completado ✓" y la barra del día al 66 %. Los cuatro días de uso tenían
+  `speaking_done = true` con `speaking_practice` **vacía**. La app llevaba tres semanas diciendo
+  que ya habías hablado. **Ahora sólo lo marca el micrófono**, y la prueba es la presencia de
+  `score` en `/situations/:id/practice`, que viene del reconocimiento de voz.
+- **Writing y las 5 tareas del oral vivían dentro de SIMULACROS.** `exam.js` era lo ÚNICO que
+  llamaba a `loadWritingTasks()` y `loadSpeakingTasks()`, y esa pantalla salió de la barra el
+  2-ago. Quitarla se llevó por delante dos secciones que no tienen nada que ver con hacer un
+  simulacro, sin que nada lo delatara. Writing tiene ahora **sección propia (ESCRIBIR)** y el oral
+  está en **HABLAR**. Lección: al mover una pantalla de sitio, mirar qué se cargaba **desde
+  dentro** de ella.
+- **Cada situación pedía 12-13 frases con micrófono y sólo contaba entera.** Al lado de una sesión
+  de 5 minutos que daba la misma marca sin sacar el móvil del bolsillo, entrar era triplicar el
+  esfuerzo por el mismo resultado. Ahora van **por tandas de 4** (`config.situation_batch`) y se
+  retoman por donde se dejaron (`situation_progress.lines_done`).
+
+**Y el plan de 30 días existía sin que nada lo mirase.** El currículo asigna situación y gramática
+a cada jornada, y la sesión servía la primera situación sin terminar. Ahora `/sesion-diaria` coge
+la del día del plan y sólo cae a "la primera sin terminar" si ese día no tiene ninguna asignada.
+
+**Regla que sale de todo esto:** una meta que se marca sola no es una meta, es un permiso para no
+hacerla. Antes de dar por bueno cualquier ✓ automático, mirar qué tabla debería tener una fila
+nueva — si no la tiene, el ✓ está mintiendo.
+
 ## La hora es la del usuario, no la del servidor
 
 El contenedor corre en **UTC y sin variable TZ**. Mientras la app usó `getHours()` y
@@ -382,7 +413,11 @@ acumulativas idempotentes**, que se aplican a mano y en orden:
 `_10` FSRS → `_11` reading → `_12` iconos → `_13` writing y speaking → `_14` listening →
 `_15` iconos por sector → `_16` pronunciación → `_17` AFI por par mínimo → `_18` avisos y sesión →
 `_19` correcciones de los pares (la h, r/l, e-fantasma, AFI y orden) → `_20` qué pares tienen
-audio fiable.
+audio fiable → `_21` situaciones por tandas.
+
+**Ojo: las tablas son de `postgres`, no del usuario `tutoringles`.** Cualquier migración con
+`ALTER TABLE` hay que aplicarla con `-U postgres` o responde `must be owner of table`. La
+transacción entera hace rollback, así que no deja nada a medias, pero se pierde el viaje.
 
 **La `_20` la GENERA `tools/cortar-pares.js`, no se escribe a mano**: sus `audio_ok` salen de
 medir los ficheros, así que hay que rehacerla cada vez que se regenere el audio.
