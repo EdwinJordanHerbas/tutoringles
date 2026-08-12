@@ -3,7 +3,7 @@
 //  · Estáticos (css/js/fuentes):     cache-first con actualización en segundo plano
 //  · Navegación (index.html):        network-first con fallback a caché (offline)
 //  · API (/words, /stats, etc.):     siempre red — nunca cachear datos dinámicos
-const VERSION     = 'tutoringles-v29';
+const VERSION     = 'tutoringles-v30';
 const STATIC_CACHE = `${VERSION}-static`;
 
 const PRECACHE = [

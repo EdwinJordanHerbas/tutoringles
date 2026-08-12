@@ -812,6 +812,118 @@ app.post('/exam-quiz/grade', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════
+// DIAGNÓSTICO — de dónde se parte
+// ════════════════════════════════════════════════════════
+// `user_level` decía B1 desde la migración base, escrito a mano, y
+// `exam_attempts` tenía CERO filas: nadie había medido nada. Con el examen
+// movido a finales de octubre, la diferencia entre estar en B1 o en B2 alto son
+// dos meses de trabajo distinto, así que esto deja de ser opcional.
+
+// Cuántas preguntas de cada parte entran. Se cogen de las cuatro partes de Use
+// of English porque son las que mejor separan niveles con pocas preguntas: no
+// dependen de haber leído un texto largo ni de oír bien un audio, y se corrigen
+// solas sin criterio humano.
+const DIAG_REPARTO = {
+  open_cloze:              6,
+  mc_cloze:                6,
+  word_formation:          6,
+  key_word_transformation: 6,
+};
+
+/**
+ * Traduce el porcentaje a una franja del MCER.
+ *
+ * Las preguntas son de nivel C1, así que el listón no es el escolar: en el CAE
+ * real se aprueba en torno al 60 %. Es una ESTIMACIÓN para decidir por dónde
+ * atacar, y la app lo dice con esas palabras — no es una nota oficial ni
+ * pretende serlo.
+ */
+function nivelDesdePct(pct) {
+  if (pct >= 80) return { nivel: 'C1+', texto: 'Por encima del aprobado. El examen está a tiro.' };
+  if (pct >= 60) return { nivel: 'C1',  texto: 'En la franja de aprobado, justo. Hay que consolidar.' };
+  if (pct >= 45) return { nivel: 'B2+', texto: 'Cerca. Falta el salto de precisión que pide el C1.' };
+  if (pct >= 30) return { nivel: 'B2',  texto: 'Base sólida, pero el C1 pide bastante más.' };
+  return { nivel: 'B1', texto: 'Queda un nivel entero por delante. Conviene hablarlo antes de fijar fecha.' };
+}
+
+// GET /diagnostico — el test, equilibrado entre las cuatro partes
+app.get('/diagnostico', async (req, res) => {
+  try {
+    const trozos = await Promise.all(
+      Object.entries(DIAG_REPARTO).map(([part, n]) =>
+        db(`SELECT id, part, prompt, options, given_word
+              FROM exam_questions
+             WHERE part = $1 AND text_id IS NULL
+             ORDER BY random() LIMIT $2`, [part, n]))
+    );
+    const preguntas = trozos.flatMap((t) => t.rows);
+
+    const { rows: cfg } = await db(
+      "SELECT key, value FROM config WHERE key IN ('nivel_medido','nivel_medido_pct','nivel_medido_fecha','target_exam_date')");
+    const c = Object.fromEntries(cfg.map((r) => [r.key, r.value]));
+
+    res.json({
+      preguntas,
+      total: preguntas.length,
+      ya_hecho: !!c.nivel_medido,
+      nivel_medido: c.nivel_medido || null,
+      pct: c.nivel_medido_pct ? Number(c.nivel_medido_pct) : null,
+      fecha: c.nivel_medido_fecha || null,
+      examen: c.target_exam_date || null,
+    });
+  } catch (e) { fallo(res, e); }
+});
+
+// POST /diagnostico — corregir, estimar el nivel y guardarlo
+app.post('/diagnostico', async (req, res) => {
+  const answers = Array.isArray(req.body?.answers) ? req.body.answers : [];
+  if (!answers.length) return res.status(400).json({ error: 'answers requerido' });
+  try {
+    const { rows } = await db('SELECT * FROM exam_questions WHERE id = ANY($1)',
+      [answers.map((a) => a.id)]);
+    const byId = Object.fromEntries(rows.map((q) => [q.id, q]));
+
+    const detail = answers.map((a) => {
+      const q = byId[a.id];
+      if (!q) return { id: a.id, correct: false };
+      return {
+        id: q.id, part: q.part, prompt: q.prompt,
+        your: a.response ?? '', answer: q.answer,
+        correct: norm(a.response) === norm(q.answer),
+        explanation: q.explanation,
+      };
+    });
+
+    const aciertos = detail.filter((d) => d.correct).length;
+    const pct = Math.round((aciertos / detail.length) * 100);
+    const { nivel, texto } = nivelDesdePct(pct);
+
+    // Por parte, que es lo que dice por dónde empezar: no es lo mismo fallar
+    // las transformaciones que no tener léxico.
+    const porParte = {};
+    for (const d of detail) {
+      porParte[d.part] ??= { total: 0, aciertos: 0 };
+      porParte[d.part].total++;
+      if (d.correct) porParte[d.part].aciertos++;
+    }
+
+    await db(`INSERT INTO config (key, value) VALUES ('nivel_medido', $1)
+              ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [nivel]);
+    await db(`INSERT INTO config (key, value) VALUES ('nivel_medido_pct', $1)
+              ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [String(pct)]);
+    await db(`INSERT INTO config (key, value) VALUES ('nivel_medido_fecha', $1)
+              ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [todayStr()]);
+    await db(
+      `INSERT INTO exam_attempts (profile_id, date, section, score, max_score, notes)
+       VALUES ($1, $2, 'diag', $3, 100, $4)`,
+      [PROFILE_ID, todayStr(), pct, `Diagnóstico inicial · ${aciertos}/${detail.length} · ${nivel}`]);
+    await addXp(30);
+
+    res.json({ total: detail.length, aciertos, pct, nivel, texto, porParte, detail });
+  } catch (e) { fallo(res, e); }
+});
+
+// ════════════════════════════════════════════════════════
 // READING (partes 5-8 del paper de Reading & Use of English)
 // ════════════════════════════════════════════════════════
 

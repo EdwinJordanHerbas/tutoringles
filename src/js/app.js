@@ -601,6 +601,7 @@ async function loadHoyData() {
 
   // Activación del aviso diario, lo primero de la pantalla mientras haga falta
   if (typeof pintarAvisoHoy === 'function') pintarAvisoHoy();
+  if (typeof pintarDiagnosticoHoy === 'function') pintarDiagnosticoHoy();
 }
 
 async function loadStreakWeek() {
