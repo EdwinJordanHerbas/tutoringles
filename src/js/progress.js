@@ -16,7 +16,7 @@ async function initProgress() {
     const stats = await apiGet('/stats') || {};
     renderProgressDashboard(stats);
   } catch (e) {
-    container.innerHTML = `<div class="empty-state">Error cargando progreso: ${e.message}</div>`;
+    container.innerHTML = cajaError(e);
   }
 }
 
@@ -25,6 +25,8 @@ function renderProgressDashboard(stats) {
   const container  = document.getElementById('progress-content');
   const levels     = ['A2', 'B1', 'B2', 'C1'];
   const levelColors = { A2: 'var(--level-a2)', B1: 'var(--level-b1)', B2: 'var(--level-b2)', C1: 'var(--level-c1)' };
+  // Sin nivel demostrado, el roadmap arranca en A2 pero se marca como no confirmado.
+  const hasLevel   = Boolean(stats.estimated_level);
   const currentLvl = stats.estimated_level || 'A2';
   const currentIdx = levels.indexOf(currentLvl);
 
@@ -42,24 +44,27 @@ function renderProgressDashboard(stats) {
   const { rank, next } = rankData;
   const xpPct = next ? Math.min(100, Math.round(((xp - rank.xp) / (next.xp - rank.xp)) * 100)) : 100;
 
-  // Habilidades (usa scores del examen o defaults)
+  // Habilidades. El nivel viene calculado del servidor con los intentos reales;
+  // si no hay datos suficientes llega como null y aquí se muestra un guion.
+  // Nunca se rellena con un nivel inventado.
+  const sk = stats.skills || {};
   const skills = [
-    { key: 'reading',   icon: '📖', name: 'Reading',   pct: stats.exam_scores?.reading   || 0, estLvl: 'B2' },
-    { key: 'writing',   icon: '✍️',  name: 'Writing',   pct: stats.exam_scores?.writing   || 0, estLvl: 'B1' },
-    { key: 'listening', icon: '🎧', name: 'Listening', pct: stats.exam_scores?.listening || 0, estLvl: 'B1' },
-    { key: 'speaking',  icon: '🗣️',  name: 'Speaking',  pct: stats.exam_scores?.speaking  || 0, estLvl: 'A2' },
-    { key: 'vocab',     icon: '📝', name: 'Vocabulary', pct: stats.vocab_pct || 0,              estLvl: 'A2' },
+    { key: 'reading',   icon: '<img src="src/img/icons/vocab.png" alt="" class="ico">', name: 'Reading',    pct: sk.reading?.pct   ?? 0, estLvl: sk.reading?.level   || null },
+    { key: 'writing',   icon: '<img src="src/img/icons/writing.png" alt="" class="ico">',  name: 'Writing',    pct: sk.writing?.pct   ?? 0, estLvl: sk.writing?.level   || null },
+    { key: 'listening', icon: '<img src="src/img/icons/headphones.png" alt="" class="ico">', name: 'Listening',  pct: sk.listening?.pct ?? 0, estLvl: sk.listening?.level || null },
+    { key: 'speaking',  icon: '<img src="src/img/icons/speak.png" alt="" class="ico">',  name: 'Speaking',   pct: sk.speaking?.pct  ?? 0, estLvl: sk.speaking?.level  || null },
+    { key: 'vocab',     icon: '<img src="src/img/icons/gram.png" alt="" class="ico">', name: 'Vocabulary', pct: sk.vocab?.pct     ?? (stats.vocab_pct || 0), estLvl: sk.vocab?.level || null },
   ];
 
   // Logros disponibles
   const totalWords = stats.words_total || 1000;
   const achievements = [
-    { icon: '🌱', name: 'Primera palabra', desc: '¡Empezaste tu viaje!', done: (stats.words_mastered || 0) >= 1 },
-    { icon: '🔥', name: 'Semana de fuego', desc: '7 días de racha',      done: (stats.streak_max  || 0) >= 7 },
-    { icon: '📚', name: '100 palabras',    desc: 'Vocabulario sólido',   done: (stats.words_mastered || 0) >= 100 },
-    { icon: '🎯', name: 'Primer examen',   desc: 'Simulacro completado', done: (stats.exams_done  || 0) >= 1 },
-    { icon: '⭐', name: 'Racha 30 días',   desc: 'Constancia legendaria', done: (stats.streak_max || 0) >= 30 },
-    { icon: '🏆', name: 'Nivel B1',        desc: 'Superaste A2',         done: currentIdx > 0 },
+    { icon: '<img src="src/img/icons/sprout.png" alt="" class="ico">', name: 'Primera palabra', desc: '¡Empezaste tu viaje!', done: (stats.words_mastered || 0) >= 1 },
+    { icon: '<img src="src/img/icons/streak.png" alt="" class="ico">', name: 'Semana de fuego', desc: '7 días de racha',      done: (stats.streak_max  || 0) >= 7 },
+    { icon: '<img src="src/img/icons/books.png" alt="" class="ico">', name: '100 palabras',    desc: 'Vocabulario sólido',   done: (stats.words_mastered || 0) >= 100 },
+    { icon: '<img src="src/img/icons/exam.png" alt="" class="ico">', name: 'Primer examen',   desc: 'Simulacro completado', done: (stats.exams_done  || 0) >= 1 },
+    { icon: '<img src="src/img/icons/star.png" alt="" class="ico">', name: 'Racha 30 días',   desc: 'Constancia legendaria', done: (stats.streak_max || 0) >= 30 },
+    { icon: '<img src="src/img/icons/trophy.png" alt="" class="ico">', name: 'Nivel B1',        desc: 'Superaste A2',         done: currentIdx > 0 },
   ];
 
   // Roadmap progress %
@@ -75,7 +80,7 @@ function renderProgressDashboard(stats) {
     <!-- 1. ROADMAP A2→B1→B2→C1 ─────────────────────────── -->
     <div class="glass-card-accent anim-fade-in">
       <div class="card-title" style="text-align:center;margin-bottom:16px">
-        🎓 CAMBRIDGE CAE — RUTA DE APRENDIZAJE
+        <img src="src/img/icons/trophy.png" alt="" class="ico"> CAMBRIDGE CAE — RUTA DE APRENDIZAJE
       </div>
       <div class="prg-roadmap">
         <div class="prg-roadmap-line">
@@ -92,11 +97,13 @@ function renderProgressDashboard(stats) {
 
     <!-- 2. CARD GRANDE DE NIVEL ACTUAL ──────────────────── -->
     <div class="prg-level-card anim-slide-up">
-      <div class="prg-level-tag">NIVEL ACTUAL</div>
-      <div class="prg-level-badge-big" style="color:${levelColors[currentLvl]};border-color:${levelColors[currentLvl]}33;background:${levelColors[currentLvl]}18">
-        ${currentLvl}
+      <div class="prg-level-tag">${hasLevel ? 'NIVEL ACTUAL' : 'NIVEL SIN MEDIR'}</div>
+      <div class="prg-level-badge-big" style="color:${levelColors[currentLvl]};border-color:${levelColors[currentLvl]}33;background:${levelColors[currentLvl]}18${hasLevel ? '' : ';opacity:.4'}">
+        ${hasLevel ? currentLvl : '—'}
       </div>
-      <div class="prg-level-subtitle">Camino al Cambridge C1 Advanced</div>
+      <div class="prg-level-subtitle">${hasLevel
+        ? `Estimado con ${stats.level_evidence} destreza${stats.level_evidence === 1 ? '' : 's'} medida${stats.level_evidence === 1 ? '' : 's'}`
+        : 'Haz simulacros para que podamos medirlo'}</div>
 
       <div class="prg-level-xp-row">
         <span class="prg-level-xp-label">${xp.toLocaleString()} XP</span>
@@ -111,7 +118,7 @@ function renderProgressDashboard(stats) {
 
       <div style="display:flex;justify-content:center;gap:12px;margin-top:16px">
         <div style="text-align:center">
-          <div style="font-family:var(--font-mono);font-size:1.2rem;font-weight:700;color:var(--warning)">🔥 ${stats.streak || 0}</div>
+          <div style="font-family:var(--font-mono);font-size:1.2rem;font-weight:700;color:var(--warning)"><img src="src/img/icons/streak.png" alt="" class="ico"> ${stats.streak || 0}</div>
           <div style="font-size:0.55rem;color:var(--text-muted);letter-spacing:1.5px;margin-top:2px">RACHA ACTUAL</div>
         </div>
         <div style="width:1px;background:rgba(156,190,214,0.30)"></div>
@@ -130,22 +137,22 @@ function renderProgressDashboard(stats) {
     <!-- 3. STATS GRID (4 cards pequeñas) ────────────────── -->
     <div class="prg-stats-grid">
       <div class="prg-stat-card">
-        <span class="prg-stat-icon">📚</span>
+        <span class="prg-stat-icon"><img src="src/img/icons/books.png" alt="" class="ico"></span>
         <div class="prg-stat-value">${(stats.words_mastered || 0).toLocaleString()}</div>
         <div class="prg-stat-label">Palabras aprendidas</div>
       </div>
       <div class="prg-stat-card">
-        <span class="prg-stat-icon">🔥</span>
+        <span class="prg-stat-icon"><img src="src/img/icons/streak.png" alt="" class="ico"></span>
         <div class="prg-stat-value" style="color:var(--warning)">${stats.streak || 0}</div>
         <div class="prg-stat-label">Días de racha</div>
       </div>
       <div class="prg-stat-card">
-        <span class="prg-stat-icon">🎯</span>
+        <span class="prg-stat-icon"><img src="src/img/icons/exam.png" alt="" class="ico"></span>
         <div class="prg-stat-value" style="color:var(--success)">${stats.sessions_total || 0}</div>
         <div class="prg-stat-label">Sesiones totales</div>
       </div>
       <div class="prg-stat-card">
-        <span class="prg-stat-icon">⭐</span>
+        <span class="prg-stat-icon"><img src="src/img/icons/star.png" alt="" class="ico"></span>
         <div class="prg-stat-value" style="color:var(--level-c1)">${stats.best_exam_score != null ? stats.best_exam_score + '%' : '—'}</div>
         <div class="prg-stat-label">Mejor nota examen</div>
       </div>
@@ -160,7 +167,9 @@ function renderProgressDashboard(stats) {
           <div class="prg-skill-info">
             <div class="prg-skill-header">
               <span class="prg-skill-name">${s.name}</span>
-              <span class="prg-skill-lvl skill-lvl-${s.key}">${s.estLvl}</span>
+              <span class="prg-skill-lvl skill-lvl-${s.key}"
+                    ${s.estLvl ? '' : 'style="opacity:.45" title="Sin datos suficientes: haz ejercicios de esta destreza"'}
+                >${s.estLvl || '—'}</span>
             </div>
             <div class="prg-skill-bar">
               <div class="prg-skill-fill skill-${s.key}" style="width:${s.pct}%"></div>
@@ -224,7 +233,7 @@ function renderProgressDashboard(stats) {
       <div class="card-title">RÉCORDS</div>
       <div class="prg-records-strip">
         <div class="prg-record-item">
-          <div class="prg-record-value" style="color:var(--warning)">🔥 ${stats.streak_max || 0}</div>
+          <div class="prg-record-value" style="color:var(--warning)"><img src="src/img/icons/streak.png" alt="" class="ico"> ${stats.streak_max || 0}</div>
           <div class="prg-record-label">Racha máxima</div>
         </div>
         <div style="width:1px;background:rgba(156,190,214,0.25)"></div>

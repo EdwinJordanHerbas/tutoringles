@@ -145,6 +145,13 @@
   box-shadow: 0 0 24px rgba(255,69,58,0.30), var(--shadow-raised);
 }
 
+/* Botón de micro pequeño (frases del carril diario) mientras graba */
+.btn-icon.recording {
+  background: rgba(255,69,58,0.12);
+  color: var(--danger);
+  animation: pulse-glow 1s ease infinite;
+}
+
 /* ── GRAMMAR ───────────────────────────────────────────── */
 #sec-gram .topic-list {
   display: flex;
@@ -890,3 +897,190 @@
 
 .level-node.current .level-node-label { color: var(--accent); }
 .level-node.done    .level-node-label { color: var(--success); }
+
+/* ── READING (partes 5-8 del CAE) ───────────────────────
+   Los textos son largos: prioridad absoluta a la legibilidad. */
+.reading-body {
+  font-size: 0.86rem;
+  line-height: 1.75;
+  color: var(--text);
+  white-space: pre-line;      /* respeta los saltos de párrafo del texto */
+}
+
+.reading-gap {
+  display: inline-block;
+  margin: 6px 0;
+  padding: 4px 14px;
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.reading-extra {
+  display: flex;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--surface-2);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.reading-extra:last-child { border-bottom: none; }
+
+.reading-extra-letter {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.7rem;
+}
+
+.reading-q { padding: 12px 0; border-bottom: 1px solid var(--surface-2); }
+.reading-q:last-of-type { border-bottom: none; }
+
+.reading-q-prompt {
+  font-size: 0.8rem;
+  color: var(--text);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.reading-options { display: flex; flex-direction: column; gap: 6px; }
+.reading-letters { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.reading-opt {
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--surface-3);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 0.76rem;
+  line-height: 1.45;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background .12s ease, border-color .12s ease;
+}
+.reading-letters .reading-opt {
+  min-width: 42px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+.reading-opt:active { transform: scale(0.98); }
+.reading-opt.selected {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.reading-review {
+  padding: 10px 0 10px 12px;
+  border-left: 3px solid var(--surface-3);
+  margin-bottom: 8px;
+}
+.reading-review.ok { border-left-color: var(--success); }
+.reading-review.ko { border-left-color: var(--danger); }
+
+/* ── WRITING ─────────────────────────────────────────────
+   Rúbrica oficial de Cambridge: cuatro criterios de 0 a 5. */
+.wr-criterio {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--surface-2);
+}
+.wr-criterio:last-of-type { border-bottom: none; }
+
+.wr-criterio-nombre {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.wr-criterio-desc {
+  font-size: 0.66rem;
+  color: var(--text-3);
+  line-height: 1.4;
+  max-width: 26ch;
+}
+
+.wr-escala { display: flex; gap: 4px; flex-shrink: 0; }
+
+.wr-punto {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--surface-3);
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .12s ease;
+}
+.wr-punto.selected {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* ── SPEAKING ────────────────────────────────────────── */
+.sp-prompts, .sp-photos {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 0.82rem;
+  color: var(--text-2);
+  line-height: 1.75;
+}
+.sp-prompts li, .sp-photos li { margin-bottom: 6px; }
+
+.sp-question {
+  font-size: 0.85rem;
+  color: var(--text);
+  line-height: 1.6;
+  font-weight: 500;
+}
+
+.sp-decision {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-dim);
+  border: 1px solid rgba(0,122,255,0.28);
+  font-size: 0.8rem;
+  color: var(--accent);
+  line-height: 1.55;
+}
+
+.sp-followup {
+  margin-top: 10px;
+  font-size: 0.74rem;
+  color: var(--text-3);
+  font-style: italic;
+}
+
+.sp-clock {
+  font-family: var(--font-mono);
+  font-size: 2.6rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 2px;
+  margin: 6px 0 10px;
+  transition: color .2s ease;
+}
+.sp-clock.warning { color: var(--warning); animation: pulse-glow 1s ease infinite; }

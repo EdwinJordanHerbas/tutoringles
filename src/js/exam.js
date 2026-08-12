@@ -6,11 +6,15 @@
 let _examInited   = false;
 let _examAttempts = [];
 
+// Formato oficial del C1 Advanced (cambridgeenglish.org).
+// Reading y Use of English son UN SOLO paper de 8 partes, 56 preguntas y 90 min:
+//   partes 1-4 = Use of English (30 preguntas) · partes 5-8 = Reading (26 preguntas)
+// Cada una de las cinco destrezas pesa un 20% de la nota final.
 const EXAM_SECTIONS = [
-  { id: 'reading',   icon: '📖', name: 'Reading',   desc: '4 parts · 36 questions · 75 min' },
-  { id: 'writing',   icon: '✍️', name: 'Writing',   desc: '2 parts · essays/reports · 90 min' },
-  { id: 'listening', icon: '🎧', name: 'Listening', desc: '4 parts · 30 questions · 40 min' },
-  { id: 'speaking',  icon: '🗣️', name: 'Speaking',  desc: '4 parts · paired exam · 15 min' },
+  { id: 'reading',   icon: '<img src="src/img/icons/vocab.png" alt="" class="ico">', name: 'Reading',   desc: 'Partes 5-8 · 26 preguntas · dentro de los 90 min' },
+  { id: 'writing',   icon: '<img src="src/img/icons/writing.png" alt="" class="ico">', name: 'Writing',   desc: '2 tareas · 220-260 palabras cada una · 90 min' },
+  { id: 'listening', icon: '<img src="src/img/icons/headphones.png" alt="" class="ico">', name: 'Listening', desc: '4 partes · 30 preguntas · unos 40 min' },
+  { id: 'speaking',  icon: '<img src="src/img/icons/speak.png" alt="" class="ico">', name: 'Speaking',  desc: '4 partes · en pareja · 15 min' },
 ];
 
 // Partes auto-corregibles del Use of English (banco exam_questions)
@@ -35,7 +39,7 @@ async function initExam() {
     _examAttempts = await apiGet('/exam-attempts') || [];
     renderExamDashboard();
   } catch (e) {
-    container.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
+    container.innerHTML = cajaError(e);
   }
 }
 
@@ -64,6 +68,30 @@ function renderExamDashboard() {
           </button>
         `).join('')}
       </div>
+    </div>
+
+    <div class="glass-card-accent anim-fade-in" style="margin-bottom:14px">
+      <div class="card-title">PRACTICAR · READING</div>
+      <p style="font-size:0.72rem;color:var(--text-3);margin-bottom:10px">Partes 5 a 8 del mismo paper. Textos completos con corrección automática:</p>
+      <div id="reading-tasks"><div class="empty-state" style="padding:8px 0"><div class="spinner"></div></div></div>
+    </div>
+
+    <div class="glass-card-accent anim-fade-in" style="margin-bottom:14px">
+      <div class="card-title">PRACTICAR · LISTENING</div>
+      <p style="font-size:0.72rem;color:var(--text-3);margin-bottom:10px">4 partes, 30 preguntas. Recuerda: en el examen se escucha dos veces:</p>
+      <div id="listening-tasks"><div class="empty-state" style="padding:8px 0"><div class="spinner"></div></div></div>
+    </div>
+
+    <div class="glass-card-accent anim-fade-in" style="margin-bottom:14px">
+      <div class="card-title">PRACTICAR · WRITING</div>
+      <p style="font-size:0.72rem;color:var(--text-3);margin-bottom:10px">Escribes tú y te puntúas con la rúbrica oficial de Cambridge:</p>
+      <div id="writing-tasks"><div class="empty-state" style="padding:8px 0"><div class="spinner"></div></div></div>
+    </div>
+
+    <div class="glass-card-accent anim-fade-in" style="margin-bottom:14px">
+      <div class="card-title">PRACTICAR · SPEAKING</div>
+      <p style="font-size:0.72rem;color:var(--text-3);margin-bottom:10px">Las 4 partes del oral, con cronómetro para el minuto seguido:</p>
+      <div id="speaking-tasks"><div class="empty-state" style="padding:8px 0"><div class="spinner"></div></div></div>
     </div>
 
     <div class="glass-card anim-fade-in" style="margin-bottom:14px">
@@ -121,6 +149,170 @@ function renderExamDashboard() {
       }).join('')}
     </div>` : ''}
   `;
+
+  // Las tareas se cargan aparte, sin bloquear el pintado del panel.
+  loadReadingTasks();
+  if (typeof loadListeningTasks === 'function') loadListeningTasks();
+  if (typeof loadWritingTasks   === 'function') loadWritingTasks();
+  if (typeof loadSpeakingTasks  === 'function') loadSpeakingTasks();
+}
+
+// ══════════════════════ READING (partes 5-8) ══════════════════════
+const READING_PARTS = {
+  reading_mc:  { n: 5, nombre: 'Multiple choice',            desc: 'Un texto largo, 6 preguntas de opción múltiple' },
+  cross_text:  { n: 6, nombre: 'Cross-text matching',        desc: 'Cuatro opiniones que hay que comparar entre sí' },
+  gapped_text: { n: 7, nombre: 'Gapped text',                desc: 'Encajar los párrafos que faltan; sobra uno' },
+  multi_match: { n: 8, nombre: 'Multiple matching',          desc: 'Localizar información en varias secciones' },
+};
+
+let _reading = { task: null };
+
+async function loadReadingTasks() {
+  const box = document.getElementById('reading-tasks');
+  if (!box) return;
+  try {
+    const tasks = await apiGet('/reading/tasks') || [];
+    if (!tasks.length) {
+      box.innerHTML = '<div class="empty-state" style="padding:8px 0">Aún no hay textos de Reading.</div>';
+      return;
+    }
+    box.innerHTML = tasks.map(t => {
+      const info = READING_PARTS[t.part] || { n: '?', nombre: t.part, desc: '' };
+      return `
+        <button class="topic-item" style="width:100%;margin-bottom:6px" onclick="startReading('${t.slug}')">
+          <div class="topic-item-info">
+            <div class="topic-item-title">Parte ${info.n} · ${info.nombre}</div>
+            <div class="topic-item-meta">${info.desc} · ${t.questions} preguntas</div>
+          </div>
+          <span class="badge badge-c1">C1</span>
+        </button>`;
+    }).join('');
+  } catch (e) {
+    box.innerHTML = cajaError(e);
+  }
+}
+
+async function startReading(slug) {
+  const container = document.getElementById('exam-content');
+  container.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+  try {
+    _reading.task = await apiGet(`/reading/task/${slug}`);
+    renderReading();
+  } catch (e) {
+    container.innerHTML = cajaError(e);
+  }
+}
+
+function renderReading() {
+  const t = _reading.task;
+  const info = READING_PARTS[t.part] || { n: '?', nombre: t.part };
+  const container = document.getElementById('exam-content');
+
+  // Los huecos [1]…[n] del enunciado se convierten en marcas visibles.
+  const cuerpo = _esc(t.body).replace(/\[(\d+)\]/g,
+    '<div class="reading-gap">— hueco $1 —</div>');
+
+  // Textos sueltos: opiniones (parte 6), párrafos (parte 7) o secciones (parte 8)
+  const extras = Array.isArray(t.extras) ? t.extras : [];
+  const extrasHtml = extras.length ? `
+    <div class="glass-card" style="margin-bottom:12px">
+      <div class="card-title">${t.part === 'gapped_text' ? 'PÁRRAFOS DISPONIBLES' : 'TEXTOS'}</div>
+      ${extras.map(x => `
+        <div class="reading-extra">
+          <span class="reading-extra-letter">${x.letter}</span>
+          <span>${_esc(x.text)}</span>
+        </div>`).join('')}
+    </div>` : '';
+
+  container.innerHTML = `
+    <button class="btn btn-subtle btn-sm" onclick="renderExamDashboard()" style="margin-bottom:12px">← VOLVER</button>
+
+    <div class="glass-card-accent anim-slide-up" style="margin-bottom:12px">
+      <div class="card-title">PARTE ${info.n} · ${info.nombre.toUpperCase()}</div>
+      <div style="font-size:0.8rem;font-weight:600;color:var(--text);margin-bottom:4px">${_esc(t.title)}</div>
+      <div style="font-size:0.72rem;color:var(--text-3)">${_esc(t.intro || '')}</div>
+    </div>
+
+    <div class="glass-card" style="margin-bottom:12px">
+      <div class="reading-body">${cuerpo}</div>
+    </div>
+
+    ${extrasHtml}
+
+    <div class="glass-card">
+      <div class="card-title">PREGUNTAS</div>
+      ${t.questions.map((q, i) => {
+        const opts = Array.isArray(q.options) ? q.options : [];
+        // Con letras (A-G) se pintan como botones; si son textos largos, como lista.
+        const soloLetras = opts.every(o => typeof o === 'string' && o.length <= 2);
+        return `
+          <div class="reading-q" data-qid="${q.id}">
+            <div class="reading-q-prompt"><b>${i + 1}.</b> ${_esc(q.prompt)}</div>
+            <div class="${soloLetras ? 'reading-letters' : 'reading-options'}">
+              ${opts.map((o, j) => {
+                const val = soloLetras ? o : String.fromCharCode(65 + j);
+                return `<button class="reading-opt" data-qid="${q.id}" data-val="${val}"
+                          onclick="pickReading(${q.id}, '${val}', this)">
+                          ${soloLetras ? o : `<b>${val}.</b> ${_esc(o)}`}
+                        </button>`;
+              }).join('')}
+            </div>
+          </div>`;
+      }).join('')}
+      <button class="btn btn-primary" onclick="submitReading()" style="margin-top:12px">CORREGIR</button>
+    </div>
+  `;
+  _reading.answers = {};
+}
+
+function pickReading(qid, val, btn) {
+  _reading.answers = _reading.answers || {};
+  _reading.answers[qid] = val;
+  document.querySelectorAll(`.reading-opt[data-qid="${qid}"]`)
+    .forEach(b => b.classList.toggle('selected', b === btn));
+}
+
+async function submitReading() {
+  const t = _reading.task;
+  const answers = t.questions.map(q => ({ id: q.id, response: (_reading.answers || {})[q.id] || '' }));
+  const sinResponder = answers.filter(a => !a.response).length;
+  if (sinResponder && !confirm(`Quedan ${sinResponder} preguntas sin responder. ¿Corregir igualmente?`)) return;
+
+  try {
+    const r = await apiPost('/exam-quiz/grade', { answers });
+    // Reading cuenta como sección 'reading' en el historial
+    await apiPost('/exam-attempts', {
+      section: 'reading', score: r.aciertos, max_score: r.total,
+      notes: `Parte ${READING_PARTS[t.part]?.n || ''} · ${t.title}`
+    });
+    await apiPost('/study-sessions', { type: 'reading', score: r.score, duration_minutes: 15 });
+    renderReadingResults(r);
+  } catch (e) {
+    toastError(e);
+  }
+}
+
+function renderReadingResults(r) {
+  const container = document.getElementById('exam-content');
+  container.innerHTML = `
+    <div class="glass-card-accent anim-scale-in" style="text-align:center;padding:24px 16px">
+      <div style="font-family:var(--font-mono);font-size:2.2rem;font-weight:700;color:${getScoreColor(r.score)}">${r.score}%</div>
+      <div style="font-size:0.8rem;color:var(--text-2)">${r.aciertos} de ${r.total} correctas</div>
+    </div>
+    <div class="glass-card" style="margin-top:10px">
+      <div class="card-title">REVISIÓN</div>
+      ${r.detail.map((d, i) => `
+        <div class="reading-review ${d.correct ? 'ok' : 'ko'}">
+          <div style="font-size:0.76rem;color:var(--text);margin-bottom:3px"><b>${i + 1}.</b> ${_esc(d.prompt)}</div>
+          <div style="font-size:0.7rem;color:var(--text-3)">
+            Tu respuesta: <b style="color:${d.correct ? 'var(--success)' : 'var(--danger)'}">${_esc(d.your) || '—'}</b>
+            ${d.correct ? '' : ` · Correcta: <b style="color:var(--success)">${_esc(d.answer)}</b>`}
+          </div>
+          ${d.explanation ? `<div style="font-size:0.68rem;color:var(--text-3);margin-top:5px;line-height:1.5">${_esc(d.explanation)}</div>` : ''}
+        </div>`).join('')}
+      <button class="btn btn-primary" onclick="renderExamDashboard()" style="margin-top:12px">VOLVER</button>
+    </div>`;
+  _examInited = false;
 }
 
 function getScoreColor(pct) {
@@ -168,10 +360,10 @@ function openExamSection(sectionId) {
 
 function getExamTips(section) {
   const tips = {
-    reading:   '• Lee el texto completo antes de las preguntas<br>• Los textos son auténticos — practica con artículos del Guardian<br>• En Part 5 (gap fill) busca cohesión y coherencia<br>• Administra 75 minutos: ~18 min por parte',
-    writing:   '• Essay: argumenta ambos lados antes de dar tu opinión<br>• Report: usa headings y lenguaje formal<br>• 240-280 palabras por tarea — ni más, ni menos<br>• Revisa gramática y variedad léxica siempre',
-    listening: '• La primera escucha es para contexto; la segunda para respuestas<br>• En Part 3 (multiple matching) el orden puede engañar<br>• Practica con podcasts de BBC World Service<br>• Escribe mientras escuchas, no después',
-    speaking:  '• En Part 2 habla 1 minuto sin parar — practica en voz alta<br>• Usa language chunks: "One aspect I find interesting is..."<br>• Pregunta la opinión de tu compañero en la discusión<br>• No te corrijas a mitad de frase — sigue fluyendo'
+    reading:   '• Reading va dentro del mismo paper que Use of English: 90 min para las 8 partes<br>• Reserva unos 50 min para las partes 5-8 y deja 40 para Use of English<br>• Part 6 (cross-text) compara opiniones entre cuatro textos: subraya quién opina qué<br>• Part 7 (gapped text) se resuelve por cohesión: pronombres y conectores<br>• Los textos son auténticos — practica con artículos del Guardian',
+    writing:   '• Part 1 es obligatoria y siempre es un essay a partir de un texto dado<br>• Part 2 eliges entre carta/email, propuesta, informe o reseña<br>• <b>220-260 palabras</b> por tarea: pasarse o quedarse corto penaliza<br>• Essay: argumenta ambos lados antes de dar tu opinión<br>• Proposal e informe: usa encabezados y registro formal',
+    listening: '• Cada grabación se escucha <b>dos veces</b><br>• La primera escucha es para contexto; la segunda para respuestas<br>• Part 2 es sentence completion: copia las palabras exactas que oigas<br>• Part 4 son cinco monólogos con dos tareas a la vez: no te quedes atrás<br>• Practica con podcasts de BBC World Service',
+    speaking:  '• Part 2 en C1 son <b>tres fotos</b>, no dos: eliges dos y las comparas<br>• Habla 1 minuto seguido sin parar — practica en alto con cronómetro<br>• Part 3 es colaborativa: hay que negociar y llegar a una decisión<br>• Usa fórmulas: "One aspect I find interesting is..."<br>• No te corrijas a mitad de frase — sigue fluyendo'
   };
   return tips[section] || '';
 }
@@ -191,7 +383,7 @@ async function startQuiz(part) {
     _quiz = { part, questions: qs };
     renderQuiz();
   } catch (e) {
-    container.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
+    container.innerHTML = cajaError(e);
   }
 }
 
@@ -269,7 +461,7 @@ async function submitQuiz() {
     showXpPop(25);
     renderQuizResults(res);
   } catch (e) {
-    container.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
+    container.innerHTML = cajaError(e);
   }
 }
 
@@ -307,11 +499,11 @@ async function saveExamResult() {
   try {
     const result = await apiPost('/exam-attempts', { section, score, max_score: max, notes: notes || '' });
     _examAttempts.unshift(result);
-    toast('✅ Resultado guardado', 'success');
+    toast('Resultado guardado', 'success');
     await apiPost('/study-sessions', { type: 'exam', score: Math.round(score / max * 100) });
     showXpPop(25);
     renderExamDashboard();
   } catch (e) {
-    toast(`Error: ${e.message}`, 'error');
+    toastError(e);
   }
 }

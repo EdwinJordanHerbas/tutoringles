@@ -18,7 +18,7 @@ async function initGrammar() {
     _gramTopics = await apiGet('/grammar-topics') || [];
     renderGrammarList();
   } catch (e) {
-    container.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
+    container.innerHTML = cajaError(e);
   }
 }
 
@@ -102,7 +102,7 @@ function openTopic(topicId) {
 async function markTopicDone(topicId, completed) {
   try {
     await apiPost('/grammar-progress', { topic_id: topicId, completed, score: completed ? 100 : null });
-    toast(completed ? '✅ Tema completado' : 'Marcado como pendiente', completed ? 'success' : '');
+    toast(completed ? 'Tema completado' : 'Marcado como pendiente', completed ? 'success' : '');
     if (completed) {
       showXpPop(20);
       // Marcar meta grammar del día
@@ -115,6 +115,6 @@ async function markTopicDone(topicId, completed) {
     _gramTopics = [];
     initGrammar();
   } catch (e) {
-    toast(`Error: ${e.message}`, 'error');
+    toastError(e);
   }
 }

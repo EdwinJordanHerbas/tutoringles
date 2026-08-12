@@ -2,3 +2,10 @@ node_modules/
 .env
 *.log
 .claude/settings.local.json
+
+# Diccionarios de pronunciación: ~10 MB de datos regenerables.
+# Se reconstruyen con `node tools/generar-lexico.js`.
+data/
+
+# Claves VAPID de las notificaciones: la privada firma los envíos.
+vapid.json

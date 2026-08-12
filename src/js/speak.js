@@ -47,12 +47,13 @@ function renderSpeakSection() {
         <span class="badge badge-${_currentPhrase.level.toLowerCase()}">${_currentPhrase.level}</span>
       </div>
       <div class="speak-phrase" id="speak-phrase">"${_currentPhrase.phrase}"</div>
+      <div id="speak-pron"></div>
       <div style="font-size:0.65rem;color:var(--text-3);margin-bottom:16px;font-family:var(--font-mono)">
         TOPIC: ${_currentPhrase.topic.toUpperCase()}
       </div>
       <div style="display:flex;justify-content:center;gap:20px;align-items:center;margin-bottom:14px">
-        <button class="btn btn-subtle" onclick="speakPhrase()" title="Escuchar" style="min-width:auto;padding:12px 16px">🔊 ESCUCHAR</button>
-        <button class="speak-record-btn" id="speak-record-btn" onclick="toggleRecording()">🎙️</button>
+        <button class="btn btn-subtle" onclick="speakPhrase()" title="Escuchar" style="min-width:auto;padding:12px 16px"><img src="src/img/icons/listen.png" alt="" class="ico"> ESCUCHAR</button>
+        <button class="speak-record-btn" id="speak-record-btn" onclick="toggleRecording()"><img src="src/img/icons/mic.png" alt="" class="ico"></button>
       </div>
       <div style="text-align:center;margin-bottom:16px">
         <div style="font-family:var(--font-mono);font-size:0.55rem;color:var(--text-3);letter-spacing:2px" id="speak-status">
@@ -85,22 +86,28 @@ function renderSpeakSection() {
   `;
 
   loadSpeakHistory();
+  cargarPronFrase();
 }
 
-// Reproduce la frase con la voz del sistema (síntesis de voz).
+// Pide al servidor cómo se lee la frase del día. El banco de frases de esta
+// sección es local, así que la figurada no puede venir con los datos: hay que
+// pedirla aparte.
+async function cargarPronFrase() {
+  const caja = document.getElementById('speak-pron');
+  if (!caja || !_currentPhrase || typeof pronFrase !== 'function') return;
+  try {
+    const p = await apiPost('/pronunciation/text', { texto: _currentPhrase.phrase });
+    if (!p) return;
+    caja.innerHTML = pronFrase(p) +
+      (typeof pronAvisosFrase === 'function' ? `<div>${pronAvisosFrase(p)}</div>` : '') +
+      (typeof pronLeyenda === 'function' ? pronLeyenda(p.leyenda, 'ley-speak') : '');
+  } catch { /* sin figurada se sigue pudiendo practicar */ }
+}
+
+// Reproduce la frase. La elección de voz vive en voz.js.
 function speakPhrase() {
-  if (!('speechSynthesis' in window) || !_currentPhrase) {
-    toast('Tu navegador no permite reproducir voz', 'error');
-    return;
-  }
-  window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(_currentPhrase.phrase);
-  u.lang = 'en-GB';
-  u.rate = 0.92;
-  const enVoice = window.speechSynthesis.getVoices().find((v) => /en[-_]GB/i.test(v.lang)) ||
-                  window.speechSynthesis.getVoices().find((v) => /^en/i.test(v.lang));
-  if (enVoice) u.voice = enVoice;
-  window.speechSynthesis.speak(u);
+  if (!_currentPhrase) return;
+  vozDecir(_currentPhrase.phrase);
 }
 
 // Compara lo dicho con la frase objetivo → % de palabras acertadas.
@@ -122,7 +129,7 @@ function toggleRecording() {
     transcript.style.display = 'block';
     transcript.innerHTML = `
       <div style="font-family:var(--font-mono);font-size:0.55rem;color:var(--text-3);margin-bottom:6px;letter-spacing:2px">MODO SIN MICRO</div>
-      <div style="color:var(--text-2);font-size:0.8rem">Este navegador no transcribe voz (iOS lo limita). Escucha con 🔊, repite en alto y puntúate al guardar.</div>`;
+      <div style="color:var(--text-2);font-size:0.8rem">Este navegador no transcribe voz (iOS lo limita). Escucha con <img src="src/img/icons/listen.png" alt="" class="ico">, repite en alto y puntúate al guardar.</div>`;
     document.getElementById('speak-actions').style.display = 'block';
     _lastTranscript = '[repetido en voz alta]';
     _lastScore = null;
@@ -139,19 +146,19 @@ function toggleRecording() {
   _recognition.onstart = () => {
     _isRecording = true;
     btn.classList.add('recording');
-    btn.textContent = '⏹';
+    btn.innerHTML = '<img src="src/img/icons/stop.png" alt="" class="ico">';
     status.textContent = 'ESCUCHANDO… HABLA AHORA';
   };
   _recognition.onerror = (e) => {
     status.textContent = e.error === 'not-allowed' ? 'PERMISO DE MICRO DENEGADO' : 'ERROR: ' + e.error;
     _isRecording = false;
     btn.classList.remove('recording');
-    btn.textContent = '🎙️';
+    btn.innerHTML = '<img src="src/img/icons/mic.png" alt="" class="ico">';
   };
   _recognition.onend = () => {
     _isRecording = false;
     btn.classList.remove('recording');
-    btn.textContent = '🎙️';
+    btn.innerHTML = '<img src="src/img/icons/mic.png" alt="" class="ico">';
     if (status.textContent.includes('ESCUCHANDO')) status.textContent = 'TOCA EL MICRO PARA REPETIR';
   };
   _recognition.onresult = (ev) => {
@@ -165,8 +172,15 @@ function toggleRecording() {
       <div style="font-family:var(--font-mono);font-size:0.55rem;color:var(--text-3);margin-bottom:6px;letter-spacing:2px">TE HE OÍDO:</div>
       <div style="color:var(--text-2)">"${said}"</div>
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--surface-2);display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:0.7rem;color:var(--text-3)">Precisión</span>
+        <span style="font-size:0.7rem;color:var(--text-3)">Reconocimiento</span>
         <span style="font-family:var(--font-mono);font-weight:700;color:${color}">${score}%</span>
+      </div>
+      <!-- Decir "Precisión" aquí era mentira: el reconocedor autocorrige hacia
+           lo que espera oír, así que se puede sacar un 100% con acento pésimo.
+           Mide si el móvil te ha entendido, no cómo pronuncias. -->
+      <div style="font-size:0.62rem;color:var(--text-4);margin-top:6px;line-height:1.45">
+        Mide si el móvil te ha entendido, no tu pronunciación: el reconocedor
+        corrige hacia lo que espera oír.
       </div>`;
     document.getElementById('speak-actions').style.display = 'block';
   };
@@ -192,12 +206,12 @@ async function saveSpeak() {
     // Marcar meta de speaking como completada
     const today = new Date().toISOString().split('T')[0];
     await apiPut(`/daily-goals/${today}`, { speaking_done: true });
-    toast('✅ Práctica guardada', 'success');
+    toast('Práctica guardada', 'success');
     await apiPost('/study-sessions', { type: 'speaking', duration_minutes: 5 });
     showXpPop(15);
     nextPhrase();
   } catch (e) {
-    toast(`Error: ${e.message}`, 'error');
+    toastError(e);
   }
 }
 

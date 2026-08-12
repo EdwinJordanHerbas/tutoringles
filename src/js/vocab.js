@@ -55,7 +55,7 @@ async function loadVocabDue() {
     if (_reviewQueue.length === 0) {
       main.innerHTML = `
         <div class="glass-card" style="text-align:center;padding:32px 16px">
-          <div style="font-size:2rem;margin-bottom:12px">✅</div>
+          <div style="font-size:2rem;margin-bottom:12px"><img src="src/img/icons/done.png" alt="" class="ico"></div>
           <div style="font-size:0.9rem;color:var(--text-2);margin-bottom:6px">¡Sin pendientes por hoy!</div>
           <div style="font-size:0.75rem;color:var(--text-3)">Vuelve mañana para seguir la racha.</div>
         </div>
@@ -65,7 +65,7 @@ async function loadVocabDue() {
     }
     renderFlashCard();
   } catch (e) {
-    main.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
+    main.innerHTML = cajaError(e);
   }
 }
 
@@ -77,7 +77,7 @@ function renderFlashCard() {
     const pct   = total > 0 ? Math.round((_sessionCorrect / total) * 100) : 0;
     main.innerHTML = `
       <div class="glass-card-accent anim-scale-in" style="text-align:center;padding:28px 16px">
-        <div style="font-size:2rem;margin-bottom:12px">${pct >= 70 ? '🎉' : '💪'}</div>
+        <div style="font-size:2rem;margin-bottom:12px">${pct >= 70 ? '<img src="src/img/icons/star.png" alt="" class="ico">' : '<img src="src/img/icons/muscle.png" alt="" class="ico">'}</div>
         <div style="font-family:var(--font-mono);font-size:1.2rem;color:var(--accent);margin-bottom:8px">${pct}%</div>
         <div style="font-size:0.8rem;color:var(--text-2);margin-bottom:16px">
           ${_sessionCorrect} correctas · ${_sessionWrong} falladas
@@ -110,8 +110,11 @@ function renderFlashCard() {
         <span class="badge" style="position:absolute;top:0;left:0;font-size:0.5rem">${_currentCard.category || ''}</span>
       </div>
       <div class="flash-word">${_currentCard.word}</div>
+      <!-- La figurada va en la CARA DE DELANTE a propósito: hay que verla
+           antes de decir la palabra, no después de haberla dicho mal. -->
+      ${pronDeCarta(_currentCard)}
       <div id="card-hint" style="font-size:0.7rem;color:var(--text-3);margin-top:4px">
-        ${_currentCard.audio_hint ? `/${_currentCard.audio_hint}/` : 'Toca para revelar'}
+        ${_currentCard.audio_hint ? _currentCard.audio_hint : 'Toca para revelar'}
       </div>
       <div id="card-back" style="display:none">
         <div class="flash-translation">${_currentCard.translation}</div>
@@ -119,15 +122,46 @@ function renderFlashCard() {
       </div>
     </div>
     <div id="review-actions" style="display:none">
-      <div class="review-btns">
-        <button class="btn-wrong"   onclick="submitReview(false)">✗ FALLÉ</button>
-        <button class="btn-correct" onclick="submitReview(true)">✓ SABÍA</button>
+      <!-- FSRS necesita cuatro grados, no dos: la diferencia entre "me ha
+           costado" y "me ha salido solo" es la que ajusta la dificultad. -->
+      <div class="review-btns-4">
+        <button class="rev-btn rev-again" onclick="submitReview(1)">
+          <span class="rev-label">Otra vez</span><span class="rev-days" id="rev-d-1">·</span>
+        </button>
+        <button class="rev-btn rev-hard"  onclick="submitReview(2)">
+          <span class="rev-label">Difícil</span><span class="rev-days" id="rev-d-2">·</span>
+        </button>
+        <button class="rev-btn rev-good"  onclick="submitReview(3)">
+          <span class="rev-label">Bien</span><span class="rev-days" id="rev-d-3">·</span>
+        </button>
+        <button class="rev-btn rev-easy"  onclick="submitReview(4)">
+          <span class="rev-label">Fácil</span><span class="rev-days" id="rev-d-4">·</span>
+        </button>
       </div>
     </div>
     <div id="reveal-hint" style="text-align:center;font-size:0.7rem;color:var(--text-4);margin-top:8px">
       Toca la tarjeta para ver la traducción
     </div>
   `;
+}
+
+// Bloque de pronunciación de una carta: figurada, botón de escuchar y avisos.
+// El servidor manda la figurada ya troceada en `pron` (ver /user-words).
+function pronDeCarta(carta) {
+  if (!carta?.pron || typeof pronFrase !== 'function') return '';
+  const p = carta.pron;
+  const avisos = typeof pronAvisosFrase === 'function' ? pronAvisosFrase(p) : '';
+  return `
+    <div class="flash-pron" onclick="event.stopPropagation()">
+      ${pronFrase(p)}
+      <div class="flash-pron-fila">
+        <button class="btn-icon" onclick="pronDecir(${JSON.stringify(carta.word).replace(/"/g, '&quot;')}, 1, this)" aria-label="Escuchar">
+          <img src="src/img/icons/listen.png" alt="" class="ico">
+        </button>
+        <div class="flash-pron-avisos">${avisos}</div>
+      </div>
+      ${typeof pronLeyenda === 'function' ? pronLeyenda(p.leyenda, 'ley-carta') : ''}
+    </div>`;
 }
 
 function revealCard() {
@@ -138,22 +172,49 @@ function revealCard() {
   document.getElementById('review-actions').style.display = 'block';
   document.getElementById('reveal-hint').style.display  = 'none';
   document.getElementById('flash-card').classList.add('flipped');
+  loadIntervalPreview();
 }
 
-async function submitReview(correct) {
+// Muestra en cada botón dentro de cuánto volvería a salir la palabra.
+async function loadIntervalPreview() {
   if (!_currentCard) return;
+  try {
+    const p = await apiGet(`/user-words/${_currentCard.id}/preview`);
+    if (!p) return;
+    for (const r of [1, 2, 3, 4]) {
+      const el = document.getElementById(`rev-d-${r}`);
+      if (el) el.textContent = fmtDays(p[r]);
+    }
+  } catch { /* si falla, los botones se quedan con el punto */ }
+}
+
+function fmtDays(d) {
+  if (d == null)  return '·';
+  if (d < 1)      return 'hoy';
+  if (d === 1)    return '1 día';
+  if (d < 30)     return `${d} días`;
+  if (d < 365)    return `${Math.round(d / 30)} mes${Math.round(d / 30) === 1 ? '' : 'es'}`;
+  return `${(d / 365).toFixed(1)} años`;
+}
+
+// rating: 1 otra vez · 2 difícil · 3 bien · 4 fácil
+async function submitReview(rating) {
+  if (!_currentCard) return;
+  const acertada = rating > 1;
   _reviewQueue.shift();
-  if (correct) _sessionCorrect++;
-  else         _sessionWrong++;
+  if (acertada) _sessionCorrect++;
+  else          _sessionWrong++;
 
   // Animar feedback
   const card = document.getElementById('flash-card');
-  if (card) card.classList.add(correct ? 'flash-correct' : 'flash-wrong');
+  if (card) card.classList.add(acertada ? 'flash-correct' : 'flash-wrong');
 
-  // Llamar a la API SRS
+  // Si se falla, la palabra vuelve al final de la cola de hoy.
+  if (!acertada) _reviewQueue.push(_currentCard);
+
   try {
-    await apiPost(`/user-words/${_currentCard.id}/review`, { correct });
-    if (correct) showXpPop(5, card);
+    await apiPost(`/user-words/${_currentCard.id}/review`, { rating });
+    if (acertada) showXpPop(5, card);
   } catch {}
 
   setTimeout(() => renderFlashCard(), 350);
@@ -180,7 +241,7 @@ async function loadVocabList(statusFilter) {
         <span class="badge badge-${(w.level||'b1').toLowerCase()}">${w.level}</span>
       </div>`).join('')}</div>`;
   } catch (e) {
-    main.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
+    main.innerHTML = cajaError(e);
   }
 }
 
@@ -237,9 +298,9 @@ async function saveNewWord() {
   if (!word || !trans) { toast('Rellena la palabra y la traducción', 'error'); return; }
   try {
     await apiPost('/words', { word, translation: trans, example_sentence: example || null, level, category });
-    toast('✅ Palabra guardada', 'success');
+    toast('Palabra guardada', 'success');
     setVocabFilter('all');
   } catch (e) {
-    toast(`Error: ${e.message}`, 'error');
+    toastError(e);
   }
 }

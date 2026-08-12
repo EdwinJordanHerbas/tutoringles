@@ -1,0 +1,270 @@
+/* TutorIngles — sesion.css
+   La sesión diaria de cinco minutos y los ajustes de aviso.
+
+   Regla de diseño: mientras la sesión está abierta no se ve nada más. Cada
+   elemento en pantalla es una decisión que tomar, y la sesión existe justo para
+   que no haya ninguna. */
+
+/* Mientras la sesión está abierta, el resto de HOY desaparece. Cada cosa que
+   quede en pantalla es una decisión posible, y la sesión existe justo para que
+   no haya ninguna que tomar. */
+#sec-hoy.en-sesion > *:not(#sesion-caja) { display: none; }
+
+/* ── EL BOTÓN DE EMPEZAR ───────────────────────────────── */
+.btn-sesion {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  padding: 18px 16px;
+  margin-bottom: 14px;
+  border-radius: var(--radius-lg);
+}
+.btn-sesion-tit {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 3px;
+}
+.btn-sesion-sub {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 1px;
+  opacity: 0.85;
+  text-transform: none;
+}
+.btn-sesion.hecha {
+  background: var(--surface-raised);
+  color: var(--text-2);
+  box-shadow: var(--shadow-raised);
+}
+
+/* ── LA SESIÓN ─────────────────────────────────────────── */
+.ses {
+  padding: 14px;
+  margin-bottom: 14px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-float);
+  border: 1px solid var(--border-glass);
+}
+.ses-cab {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.ses-cuenta {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 2px;
+  color: var(--text-3);
+}
+.ses-cerrar {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.ses-cuerpo { text-align: center; padding: 18px 4px 6px; }
+
+.ses-et {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 2px;
+  color: var(--text-3);
+  margin-bottom: 12px;
+}
+
+.ses-palabra {
+  font-size: 1.9rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.15;
+  margin-bottom: 8px;
+  word-break: break-word;
+}
+.ses-cuerpo .pron-frase { justify-content: center; }
+
+.ses-oir { margin: 10px auto 0; display: block; }
+
+.ses-tras {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--surface-3);
+}
+.ses-trad { font-size: 1.05rem; color: var(--text); font-weight: 600; }
+.ses-ej {
+  font-size: 0.78rem;
+  color: var(--text-3);
+  font-style: italic;
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+.ses-accion { width: 100%; margin-top: 18px; }
+
+.ses-grados {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: 16px;
+}
+
+/* ── Tramo de la frase ── */
+.ses-frase-en {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+.ses-frase-es { font-size: 0.82rem; color: var(--text-2); margin-top: 8px; }
+.ses-nota {
+  font-size: 0.7rem;
+  color: var(--text-3);
+  line-height: 1.5;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--surface-3);
+  text-align: left;
+}
+.ses-frase-btns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 18px;
+}
+.ses-pista {
+  font-size: 0.68rem;
+  color: var(--text-3);
+  line-height: 1.5;
+  margin-top: 10px;
+}
+
+/* ── Tramo del oído ── */
+.ses-par {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 1.6rem;
+  margin-bottom: 8px;
+}
+.ses-par-tit { font-size: 0.92rem; font-weight: 600; color: var(--text); }
+
+/* ── Final ── */
+.ses-fin { padding: 8px 4px; }
+.ses-fin-ico .ico { width: 40px; height: 40px; }
+.ses-fin-tit {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 10px 0 6px;
+}
+.ses-fin-sub { font-size: 0.85rem; color: var(--text-2); }
+.ses-fin-racha {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-radius: 999px;
+  padding: 6px 14px;
+  margin-top: 12px;
+}
+.ses-fin-pie {
+  font-size: 0.7rem;
+  color: var(--text-3);
+  margin-top: 12px;
+  line-height: 1.5;
+}
+
+/* ── AJUSTES DE AVISO ──────────────────────────────────── */
+.av-texto {
+  font-size: 0.76rem;
+  line-height: 1.6;
+  color: var(--text-2);
+  margin-bottom: 12px;
+}
+.av-fila {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--surface-3);
+}
+.av-et  { font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 1px; color: var(--text-3); }
+.av-val { font-size: 0.84rem; color: var(--text-2); margin-top: 2px; }
+.av-val.on { color: var(--success); font-weight: 600; }
+.av-hora { width: 122px; padding: 8px 10px; font-family: var(--font-mono); }
+
+.av-aviso {
+  font-size: 0.76rem;
+  line-height: 1.6;
+  color: var(--text-2);
+  background: rgba(255, 159, 10, 0.10);
+  border: 1px solid rgba(255, 159, 10, 0.30);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+.av-ok, .av-err {
+  font-size: 0.74rem;
+  line-height: 1.5;
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  margin-top: 10px;
+}
+.av-ok  { color: #1f6f3d; background: rgba(48, 209, 88, 0.12); }
+.av-err { color: #8a3028; background: rgba(255, 69, 58, 0.10); }
+
+/* ── TARJETA DE AVISO EN HOY ───────────────────────────── */
+/* Va encima del botón de EMPEZAR y se quita sola al activarse. Compacta a
+   propósito: informa y ofrece la acción sin robarle el sitio a EMPEZAR, que es
+   lo que hay que pulsar todos los días. */
+.aviso-hoy { margin-bottom: 12px; }
+.aviso-hoy-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+/* El texto se queda con el espacio sobrante y el botón sólo con el suyo. Sin
+   esto, `.btn` trae `width:100%` de serie y estruja el texto en una columna de
+   tres palabras por línea. */
+.aviso-hoy-fila > div:first-child { flex: 1 1 auto; min-width: 0; }
+.aviso-hoy-tit {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+.aviso-hoy-txt {
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.aviso-hoy-btn {
+  flex: 0 0 auto;
+  width: auto;              /* .btn trae width:100%, aquí estorba */
+  padding: 10px 18px;
+  font-size: 0.68rem;
+}
+/* Sin botón (iPhone sin instalar, permiso denegado) el texto ocupa todo y se
+   puede explicar con calma: ahí no hay nada que pulsar, sólo que entender. */
+.aviso-hoy-fila > div:only-child .aviso-hoy-txt { font-size: 0.78rem; }
+
+.field-pista {
+  font-size: 0.68rem;
+  color: var(--text-3);
+  line-height: 1.5;
+  margin-top: 5px;
+}

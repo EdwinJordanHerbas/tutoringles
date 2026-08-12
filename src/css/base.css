@@ -38,10 +38,13 @@
   --level-b2: #0a84ff;
   --level-c1: #bf5af2;
 
-  /* Texto */
+  /* Texto
+     Ojo con --text-muted: se usa en texto pequeño (títulos de sección, etiquetas
+     de la nav, contadores) sobre el fondo #d4e8f5. El #6e6e73 anterior daba 4,05:1,
+     por debajo del mínimo AA de 4,5:1. Este da 5,4:1 y sigue leyéndose como gris. */
   --text:          #1d1d1f;
   --text-dim:      #3c3c43;
-  --text-muted:    #6e6e73;
+  --text-muted:    #5a5a61;
   --text-on-accent:#ffffff;
 
   /* Bordes y radios */
@@ -61,7 +64,7 @@
   --surface-3:  rgba(156, 190, 214, 0.35);
   --text-2:     var(--text-dim);
   --text-3:     var(--text-muted);
-  --text-4:     rgba(110, 110, 115, 0.40);
+  --text-4:     rgba(90, 90, 97, 0.70);
   --success:    #30d158;
   --warning:    #ff9f0a;
   --danger:     #ff453a;
@@ -161,6 +164,22 @@ img { max-width: 100%; display: block; }
   margin-bottom: 8px;
 }
 
+/* El logotipo de la cabecera: símbolo + nombre, alineados por la base del
+   texto. El símbolo va pequeño a propósito, para que mande el nombre. */
+#hdr-marca {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#hdr-logo {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(156, 190, 214, 0.45);
+}
+
 #hdr-date {
   font-family: var(--font-mono);
   font-size: 0.55rem;
@@ -221,8 +240,24 @@ img { max-width: 100%; display: block; }
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
   padding-bottom: calc(var(--nav-h) + var(--safe-bottom) + 12px);
+
+  /* Aquí vivía -webkit-overflow-scrolling: touch. Se ha quitado a propósito:
+     en Safari de iPhone crea una capa de scroll acelerado aparte que se queda
+     con los eventos táctiles del contenedor, así que los touchmove no llegaban
+     al JavaScript y el gesto de cambiar de pestaña no ocurría nunca. Desde
+     iOS 13 el scroll con inercia ya es el comportamiento normal, o sea que la
+     propiedad no aportaba nada y sí estorbaba. */
+
+  /* CLAVE para el gesto de cambiar de pestaña. Le dice al navegador que aquí
+     solo gestiona él el desplazamiento VERTICAL; el horizontal es de la app.
+     Sin esto, el móvil trata el arrastre horizontal como cosa suya (scroll o
+     el "volver atrás" del borde), marca los eventos como no cancelables y
+     preventDefault() deja de servir: al JavaScript no le llega nada útil y el
+     deslizamiento no ocurre, aunque en un escritorio parezca que sí funciona.
+     Es la diferencia entre que el gesto exista en el teléfono o no exista. */
+  touch-action: pan-y;
+  overscroll-behavior: contain;
 }
 
 /* ── SECCIONES ─────────────────────────────────────────── */
@@ -275,8 +310,10 @@ img { max-width: 100%; display: block; }
   justify-content: center;
   gap: 3px;
   font-family: var(--font-mono);
-  font-size: 0.45rem;
-  letter-spacing: 1.5px;
+  /* Cinco pestañas en español: la palabra más larga es PALABRAS. Con solo cinco
+     sobra ancho, así que la etiqueta puede ir más grande y más aireada. */
+  font-size: 0.55rem;
+  letter-spacing: 0.8px;
   color: var(--text-muted);
   cursor: pointer;
   transition: all 0.2s;
@@ -303,18 +340,57 @@ img { max-width: 100%; display: block; }
 
 .nb.active .ni { transform: scale(1.15); }
 
+/* El resaltador de la barra. Mismo planteamiento que en OkiroSport, donde ya
+   funciona: la posición y el ancho los pone el JavaScript en píxeles, y se
+   mueve con transform (no con `left`, que va a tirones y no se acelera por
+   hardware). Así el resaltador se desliza de un botón a otro, y además puede
+   seguir el dedo si arrastras por encima de la barra. */
 #nav-lens {
   position: absolute;
   bottom: var(--safe-bottom);
   height: var(--nav-h);
-  width: calc(100% / 6);
+  width: 60px;                      /* lo ajusta el JS al ancho real del botón */
+  left: 0;
   background: var(--accent-dim);
   border-top: 2px solid var(--accent);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  transition: left 0.3s cubic-bezier(.4,0,.2,1);
-  left: 0;
+  transform: translateX(0);
+  transition: transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.3s ease;
+  will-change: transform;
+  pointer-events: none;
   opacity: 0.5;
 }
+
+/* Mientras arrastras, el resaltador va pegado al dedo, sin suavizado */
+#nav.dragging #nav-lens { transition: none; }
+
+/* Encendido progresivo mientras arrastras el dedo por la barra.
+   El JavaScript pone en --cerca un valor de 0 a 1 según lo cerca que esté el
+   dedo del centro de cada botón. Como los vecinos se solapan, al cruzar de uno
+   a otro se ve a uno apagarse mientras el otro se enciende, poco a poco, en vez
+   de un salto seco al pasar la frontera.
+   El color va con color-mix; el navegador que no lo entienda se queda con la
+   línea de arriba y solo pierde el degradado de color, no el resto. */
+.nb {
+  --cerca: 0;
+}
+
+#nav.dragging .nb {
+  color: var(--text-muted);
+  color: color-mix(in oklab, var(--text-muted), var(--accent) calc(var(--cerca) * 100%));
+}
+
+#nav.dragging .nb .ico {
+  opacity: calc(0.6 + var(--cerca) * 0.4);
+  transform: scale(calc(1 + var(--cerca) * 0.22));
+  filter: drop-shadow(0 0 calc(var(--cerca) * 9px) var(--accent-glow));
+}
+
+/* Fuera del arrastre, el icono vuelve a su sitio con suavidad */
+.nb .ico { transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1), opacity 0.25s, filter 0.25s; }
+
+/* Mientras el dedo está encima, el icono va pegado a él sin retardo */
+#nav.dragging .nb .ico { transition: none; }
 
 /* ── SPLASH ────────────────────────────────────────────── */
 #splash {
@@ -332,22 +408,15 @@ img { max-width: 100%; display: block; }
 
 .splash-inner { text-align: center; }
 
+/* Antes era un recuadro con las letras "EN" dentro. Ahora es el símbolo de
+   marca, que ya trae su propio marco neumórfico: no necesita fondo ni borde,
+   solo la sombra flotante para despegarlo del degradado. */
 .splash-logo {
-  width: 72px;
-  height: 72px;
-  background: var(--surface-glass);
-  backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
-  border: 2px solid var(--rim-light);
-  border-radius: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-mono);
-  font-size: 1.6rem;
-  font-weight: 700;
-  color: var(--accent);
+  width: 96px;
+  height: 96px;
+  display: block;
   margin: 0 auto 16px;
+  border-radius: 24px;
   box-shadow: var(--shadow-float);
 }
 
@@ -416,19 +485,11 @@ img { max-width: 100%; display: block; }
 }
 
 .lock-logo {
-  width: 56px;
-  height: 56px;
-  background: var(--accent-dim);
-  border: 2px solid var(--accent);
-  border-radius: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-mono);
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: var(--accent);
+  width: 72px;
+  height: 72px;
+  display: block;
   margin: 0 auto 16px;
+  border-radius: 18px;
   box-shadow: var(--shadow-raised);
 }
 

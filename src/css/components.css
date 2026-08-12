@@ -414,6 +414,9 @@ textarea.field-input {
   gap: 10px;
   margin-bottom: 12px;
 }
+/* Sólo quedan los dos destinos que no tienen pestaña abajo. Con cuatro
+   columnas se quedaban encogidos a un lado de la pantalla. */
+.quick-grid-2 { grid-template-columns: 1fr 1fr; }
 
 .quick-btn {
   display: flex;
@@ -529,6 +532,49 @@ textarea.field-input {
   margin-top: 16px;
 }
 
+/* ── Repaso FSRS: cuatro grados ──────────────────────────
+   Cada botón muestra dentro de cuánto volvería a salir la palabra,
+   para que la decisión sea informada y no a ciegas. */
+.review-btns-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.rev-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 11px 4px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: transform .12s ease, filter .12s ease;
+  font-family: inherit;
+}
+.rev-btn:active { transform: scale(0.95); }
+
+.rev-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1;
+}
+.rev-days {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  opacity: 0.75;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.rev-again { background: rgba(255,69,58,0.12);  color: var(--danger);  border-color: rgba(255,69,58,0.28); }
+.rev-hard  { background: rgba(255,159,10,0.12); color: var(--warning); border-color: rgba(255,159,10,0.28); }
+.rev-good  { background: rgba(48,209,88,0.12);  color: var(--success); border-color: rgba(48,209,88,0.28); }
+.rev-easy  { background: rgba(0,122,255,0.12);  color: var(--accent);  border-color: rgba(0,122,255,0.28); }
+
 .btn-correct {
   background: rgba(48,209,88,0.12);
   color: var(--success);
@@ -602,3 +648,44 @@ textarea.field-input {
   min-width: 34px;
   text-align: right;
 }
+
+/* ── ICONOS PROPIOS ──────────────────────────────────────
+   Sustituyen a los emojis: mismo dibujo en todos los sistemas.
+   Los PNG ya vienen en el azul de marca, así que no se recolorean. */
+.ico {
+  display: inline-block;
+  vertical-align: -0.15em;
+  flex-shrink: 0;
+  object-fit: contain;
+  /* Que no se seleccionen ni se arrastren al tocar en móvil */
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* En la barra de navegación el icono va suelto, sin línea base de texto */
+.ni .ico { vertical-align: middle; }
+
+/* Estados apagados: el icono acompaña al texto atenuado */
+.nb:not(.active) .ico,
+.goal-item:not(.done) .ico { opacity: 0.55; }
+.nb.active .ico { opacity: 1; }
+
+/* Logros pendientes: se ven, pero apagados */
+.prg-achievement:not(.done) .ico { opacity: 0.30; }
+
+/* Tamaños por contexto. Los contenedores tenían font-size pensado para emojis;
+   como ahora son <img>, el tamaño se fija aquí. */
+.ico                        { width: 20px; height: 20px; }
+.ni .ico                    { width: 22px; height: 22px; }
+.quick-icon .ico            { width: 26px; height: 26px; }
+.goal-icon .ico             { width: 22px; height: 22px; }
+.exam-section-icon .ico     { width: 28px; height: 28px; }
+.prg-stat-icon .ico         { width: 22px; height: 22px; }
+.prg-achievement-icon .ico  { width: 26px; height: 26px; }
+.prg-skill-icon .ico        { width: 18px; height: 18px; }
+.streak-chip .ico           { width: 14px; height: 14px; }
+.badge .ico                 { width: 14px; height: 14px; }
+#offline-banner .ico        { width: 14px; height: 14px; }
+.btn .ico                   { width: 18px; height: 18px; }
+.btn-icon .ico              { width: 20px; height: 20px; }
+.speak-record-btn .ico      { width: 30px; height: 30px; }

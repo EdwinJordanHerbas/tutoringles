@@ -17,6 +17,8 @@
 <link rel="stylesheet" href="src/css/base.css">
 <link rel="stylesheet" href="src/css/components.css">
 <link rel="stylesheet" href="src/css/sections.css">
+<link rel="stylesheet" href="src/css/pron.css">
+<link rel="stylesheet" href="src/css/sesion.css">
 <link rel="stylesheet" href="src/css/animations.css">
 </head>
 <body>
@@ -24,7 +26,7 @@
 <!-- ── SPLASH ──────────────────────────────────────────── -->
 <div id="splash">
   <div class="splash-inner">
-    <div class="splash-logo">EN</div>
+    <img class="splash-logo" src="src/img/logo.png" alt="TutorInglés" width="256" height="256">
     <h1 class="splash-title">TUTOR<span>INGLÉS</span></h1>
     <p class="splash-sub">A2 → C1 · Cambridge CAE</p>
     <div class="splash-bar"><div class="splash-fill"></div></div>
@@ -34,7 +36,7 @@
 <!-- ── AUTH SCREEN ─────────────────────────────────────── -->
 <div id="lock" style="display:none">
   <div class="lock-card">
-    <div class="lock-logo">EN</div>
+    <img class="lock-logo" src="src/img/logo.png" alt="TutorInglés" width="256" height="256">
     <h2>TUTORINGLÉS</h2>
     <p>Introduce tu clave de acceso</p>
     <input type="password" id="lock-input" placeholder="Clave de acceso" autocomplete="current-password">
@@ -44,7 +46,7 @@
 </div>
 
 <!-- ── OFFLINE BANNER ──────────────────────────────────── -->
-<div id="offline-banner">⚡ SIN CONEXIÓN</div>
+<div id="offline-banner"><img src="src/img/icons/offline.png" alt="" class="ico"> SIN CONEXIÓN</div>
 
 <!-- ── TOASTS ──────────────────────────────────────────── -->
 <div id="toasts"></div>
@@ -55,15 +57,20 @@
   <!-- Header -->
   <div id="hdr">
     <div id="hdr-top">
-      <div>
-        <p id="hdr-date">HOY</p>
-        <h1>TUTOR<span>INGLÉS</span></h1>
+      <div id="hdr-marca">
+        <img id="hdr-logo" src="src/img/logo.png" alt="" width="256" height="256">
+        <div>
+          <p id="hdr-date">HOY</p>
+          <h1>TUTOR<span>INGLÉS</span></h1>
+        </div>
       </div>
       <div id="hdr-right">
         <span id="lvl-badge" class="badge badge-level">B1</span>
-        <span id="streak-count" class="streak-chip">🔥 0</span>
+        <span id="streak-count" class="streak-chip"><img src="src/img/icons/streak.png" alt="" class="ico"> 0</span>
+        <button id="progress-btn" onclick="goTo('progreso')" aria-label="Progreso"
+          style="background:none;border:none;cursor:pointer;padding:4px;color:var(--text-3)"><img src="src/img/icons/prog.png" alt="" class="ico"></button>
         <button id="settings-btn" onclick="goTo('ajustes')" aria-label="Ajustes"
-          style="background:none;border:none;font-size:1.1rem;cursor:pointer;padding:4px;color:var(--text-3)">⚙</button>
+          style="background:none;border:none;font-size:1.1rem;cursor:pointer;padding:4px;color:var(--text-3)"><img src="src/img/icons/settings.png" alt="" class="ico"></button>
       </div>
     </div>
     <div id="xp-row">
@@ -80,6 +87,22 @@
     <div class="sec active" id="sec-hoy">
       <div class="sec-title">HOY</div>
 
+      <!-- La sesión ocupa el sitio de todo lo demás mientras dura -->
+      <div id="sesion-caja" style="display:none"></div>
+
+      <!-- Activación del aviso diario. Va lo primero y se quita sola en cuanto
+           está activado: es la pieza de la que depende que la app se abra, y
+           enterrada en Ajustes no la encontró nadie en once días. -->
+      <div id="aviso-hoy"></div>
+
+      <!-- Un solo botón: sin decidir nada, con final. Lo primero de la pantalla
+           porque es lo único que hay que hacer para no romper la racha.
+           NO puede haber otro botón primario en HOY compitiendo con este. -->
+      <button class="btn btn-primary btn-sesion" onclick="empezarSesion()">
+        <span class="btn-sesion-tit">EMPEZAR</span>
+        <span class="btn-sesion-sub" id="btn-sesion-sub">cinco minutos</span>
+      </button>
+
       <!-- Plan de 30 días -->
       <div class="glass-card-accent" id="plan-card">
         <div class="empty-state" style="padding:12px 0">Cargando plan…</div>
@@ -90,7 +113,7 @@
         <div class="card-title">Metas de hoy</div>
         <div class="goal-row">
           <div class="goal-item" id="goal-vocab">
-            <div class="goal-icon">📖</div>
+            <div class="goal-icon"><img src="src/img/icons/vocab.png" alt="" class="ico"></div>
             <div class="goal-info">
               <span class="goal-label">Vocabulario</span>
               <span class="goal-count"><span id="vocab-done">0</span> / <span id="vocab-target">20</span></span>
@@ -98,7 +121,7 @@
             <div class="goal-check" id="goal-vocab-check"></div>
           </div>
           <div class="goal-item" id="goal-grammar">
-            <div class="goal-icon">📝</div>
+            <div class="goal-icon"><img src="src/img/icons/gram.png" alt="" class="ico"></div>
             <div class="goal-info">
               <span class="goal-label">Gramática</span>
               <span class="goal-count" id="grammar-status">Pendiente</span>
@@ -106,9 +129,9 @@
             <div class="goal-check" id="goal-grammar-check"></div>
           </div>
           <div class="goal-item" id="goal-speaking">
-            <div class="goal-icon">🗣️</div>
+            <div class="goal-icon"><img src="src/img/icons/speak.png" alt="" class="ico"></div>
             <div class="goal-info">
-              <span class="goal-label">Speaking</span>
+              <span class="goal-label">Hablar</span>
               <span class="goal-count" id="speaking-status">Pendiente</span>
             </div>
             <div class="goal-check" id="goal-speaking-check"></div>
@@ -120,7 +143,11 @@
         <div class="progress-label"><span id="daily-progress-pct">0%</span> completado</div>
       </div>
 
-      <!-- Palabras pendientes hoy -->
+      <!-- Palabras pendientes hoy.
+           El botón de repaso era el segundo primario de la pantalla y competía
+           con EMPEZAR. Ahora es secundario: la sesión ya reparte las palabras
+           del día, y esto sólo hace falta cuando se han acumulado más de las
+           que entran en cinco minutos. -->
       <div class="glass-card">
         <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
           Repasar ahora
@@ -129,28 +156,22 @@
         <div id="hoy-due-preview">
           <div class="empty-state">Cargando...</div>
         </div>
-        <button class="btn btn-primary" id="btn-start-review" onclick="goTo('vocab')" style="margin-top:12px">
-          EMPEZAR REPASO →
+        <button class="btn btn-subtle" id="btn-start-review" onclick="goTo('vocab')" style="margin-top:12px">
+          VER TODAS LAS PALABRAS →
         </button>
       </div>
 
-      <!-- Accesos rápidos -->
-      <div class="quick-grid">
-        <button class="quick-btn" onclick="goTo('vocab')">
-          <span class="quick-icon">📖</span>
-          <span>Vocab</span>
-        </button>
+      <!-- Accesos rápidos: sólo lo que NO tiene pestaña abajo. Trabajo,
+           Palabras, Pronunciación y Hablar están en la barra, y repetirlos aquí
+           multiplicaba las decisiones sin añadir ningún destino nuevo. -->
+      <div class="quick-grid quick-grid-2">
         <button class="quick-btn" onclick="goTo('gram')">
-          <span class="quick-icon">📝</span>
-          <span>Gram</span>
-        </button>
-        <button class="quick-btn" onclick="goTo('speak')">
-          <span class="quick-icon">🗣️</span>
-          <span>Speak</span>
+          <span class="quick-icon"><img src="src/img/icons/gram.png" alt="" class="ico"></span>
+          <span>Reglas</span>
         </button>
         <button class="quick-btn" onclick="goTo('exam')">
-          <span class="quick-icon">🎯</span>
-          <span>Exam</span>
+          <span class="quick-icon"><img src="src/img/icons/exam.png" alt="" class="ico"></span>
+          <span>Examen</span>
         </button>
       </div>
 
@@ -169,6 +190,14 @@
       </div>
     </div>
 
+    <!-- ── WORK (carril diario) ───────────────────────────── -->
+    <div class="sec" id="sec-work">
+      <div class="sec-title">DÍA A DÍA</div>
+      <div id="work-content">
+        <div class="empty-state">Cargando...</div>
+      </div>
+    </div>
+
     <!-- ── VOCAB ─────────────────────────────────────────── -->
     <div class="sec" id="sec-vocab">
       <div class="sec-title">VOCABULARIO</div>
@@ -179,8 +208,18 @@
 
     <!-- ── SPEAK ──────────────────────────────────────────── -->
     <div class="sec" id="sec-speak">
-      <div class="sec-title">SPEAKING</div>
+      <div class="sec-title">HABLAR</div>
+      <!-- Pronunciación ya tiene pestaña propia (SONIDOS), así que este botón
+           deja de ser la única puerta y sobra encabezando la sección. -->
       <div id="speak-content">
+        <div class="empty-state">Cargando...</div>
+      </div>
+    </div>
+
+    <!-- ── PRONUNCIACIÓN ──────────────────────────────────── -->
+    <div class="sec" id="sec-pron">
+      <div class="sec-title">PRONUNCIACIÓN</div>
+      <div id="pron-content">
         <div class="empty-state">Cargando...</div>
       </div>
     </div>
@@ -196,6 +235,10 @@
     <!-- ── EXAM ───────────────────────────────────────────── -->
     <div class="sec" id="sec-exam">
       <div class="sec-title">SIMULACROS</div>
+      <!-- La gramática dejó de tener pestaña propia y se entra desde aquí -->
+      <button class="btn" onclick="goTo('gram')" style="margin-bottom:14px">
+        <img src="src/img/icons/gram.png" alt="" class="ico"> REGLAS DE GRAMÁTICA
+      </button>
       <div id="exam-content">
         <div class="empty-state">Cargando...</div>
       </div>
@@ -215,6 +258,9 @@
       <div id="settings-content">
         <div class="empty-state">Cargando...</div>
       </div>
+      <!-- Para saber de un vistazo qué versión se está ejecutando de verdad,
+           en vez de suponer que el móvil tiene la última -->
+      <div id="version-app"></div>
     </div>
 
   </div><!-- /cnt -->
@@ -222,22 +268,29 @@
   <!-- Nav -->
   <nav id="nav">
     <div id="nav-lens"></div>
-    <button class="nb active" data-sec="hoy"     onclick="goTo('hoy')">    <span class="ni">◎</span>HOY</button>
-    <button class="nb"        data-sec="vocab"   onclick="goTo('vocab')">  <span class="ni">📖</span>VOCAB</button>
-    <button class="nb"        data-sec="speak"   onclick="goTo('speak')">  <span class="ni">🗣</span>SPEAK</button>
-    <button class="nb"        data-sec="gram"    onclick="goTo('gram')">   <span class="ni">📝</span>GRAM</button>
-    <button class="nb"        data-sec="exam"    onclick="goTo('exam')">   <span class="ni">🎯</span>EXAM</button>
-    <button class="nb"        data-sec="progreso" onclick="goTo('progreso')"><span class="ni">📊</span>PROG</button>
+    <button class="nb active" data-sec="hoy"   onclick="goTo('hoy')">  <span class="ni"><img src="src/img/icons/calendar.png" alt="" class="ico"></span>HOY</button>
+    <button class="nb"        data-sec="work"  onclick="goTo('work')"> <span class="ni"><img src="src/img/icons/work.png" alt="" class="ico"></span>TRABAJO</button>
+    <button class="nb"        data-sec="vocab" onclick="goTo('vocab')"><span class="ni"><img src="src/img/icons/vocab.png" alt="" class="ico"></span>PALABRAS</button>
+    <button class="nb"        data-sec="pron"  onclick="goTo('pron')"> <span class="ni"><img src="src/img/icons/headphones.png" alt="" class="ico"></span>SONIDOS</button>
+    <button class="nb"        data-sec="speak" onclick="goTo('speak')"><span class="ni"><img src="src/img/icons/speak.png" alt="" class="ico"></span>HABLAR</button>
   </nav>
 
 </div><!-- /app -->
 
 <script src="src/js/app.js"></script>
+<script src="src/js/voz.js"></script>
+<script src="src/js/sesion.js"></script>
+<script src="src/js/avisos.js"></script>
 <script src="src/js/plan.js"></script>
+<script src="src/js/work.js"></script>
 <script src="src/js/vocab.js"></script>
 <script src="src/js/speak.js"></script>
+<script src="src/js/pron.js"></script>
+<script src="src/js/pron-intro.js"></script>
 <script src="src/js/grammar.js"></script>
 <script src="src/js/exam.js"></script>
+<script src="src/js/listening.js"></script>
+<script src="src/js/writing.js"></script>
 <script src="src/js/progress.js"></script>
 <script src="src/js/settings.js"></script>
 </body>

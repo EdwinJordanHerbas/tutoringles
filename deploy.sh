@@ -1,53 +1,50 @@
 #!/usr/bin/env bash
-# TutorIngles — despliegue en el servidor
-# Uso:  bash /opt/tutoringles/deploy.sh
+# TutorIngles — despliegue en producción
 #
-# ⚠️  SUSTITUYE las variables de la sección CONFIG antes de usar:
-#     TARBALL  → URL del tarball de tu repositorio en GitHub
-#     NGINX_SITE → ruta del archivo nginx para tu dominio
+# Uso (desde el droplet):  bash /opt/tutoringles/deploy.sh
+#
+# /opt/tutoringles está montado dentro del contenedor en /app, así que basta
+# con actualizar los archivos del directorio y reiniciar el contenedor.
 #
 set -euo pipefail
 
-# ── CONFIG (AJUSTA ESTOS VALORES) ────────────────────────
-SRC=/tmp/tutoringles-deploy
-TARBALL=https://github.com/TU_USUARIO/tutoringles/archive/refs/heads/main.tar.gz
-NGINX_SITE=/etc/nginx/sites-available/tutoringles
 BACKEND_DIR=/opt/tutoringles
-SERVICE_NAME=tutoringles           # nombre del servicio systemd o contenedor docker
+CONTAINER=tutoringles
+DB_CONTAINER=postgres
+DB_NAME=tutoringles
+URL=https://tutoringles.tinafusion.com
 
-echo ">> Backup"
-[ -f "$BACKEND_DIR/server.js" ] && cp "$BACKEND_DIR/server.js" "$BACKEND_DIR/server.js.bak"
-[ -d "$BACKEND_DIR/src" ]       && tar czf /opt/tutoringles.bak.tgz -C "$BACKEND_DIR" src index.html sw.js manifest.json 2>/dev/null || true
+cd "$BACKEND_DIR"
 
-echo ">> Descargar código"
-rm -rf "$SRC" && mkdir -p "$SRC"
-curl -fsSL "$TARBALL" | tar xz -C "$SRC" --strip-components=1
+echo ">> Backup de la base de datos"
+docker exec "$DB_CONTAINER" pg_dump -U postgres "$DB_NAME" \
+  > "/root/${DB_NAME}_backup_$(date +%Y%m%d_%H%M%S).sql"
 
-echo ">> Verificar versión"
-grep -q 'TutorIngles Backend' "$SRC/server.js" || {
-  echo "!! El tarball no contiene TutorIngles v1. Abortando."; exit 1;
-}
+echo ">> Actualizar código"
+if [ -d .git ]; then
+  git pull --ff-only
+else
+  echo "   (sin repo git aquí: sube los archivos con scp antes de ejecutar esto)"
+fi
 
-echo ">> Backend"
-cp "$SRC/server.js"  "$BACKEND_DIR/server.js"
-cp "$SRC/package.json" "$BACKEND_DIR/package.json"
+echo ">> Comprobar sintaxis"
+docker run --rm -v "$BACKEND_DIR:/app" -w /app node:20-alpine node --check server.js
 
-echo ">> Frontend"
-cp "$SRC/index.html" "$SRC/manifest.json" "$SRC/sw.js" "$BACKEND_DIR/"
-rm -rf "$BACKEND_DIR/src"
-cp -r  "$SRC/src" "$BACKEND_DIR/src"
+echo ">> Migraciones"
+echo "   Son idempotentes y se aplican a mano:"
+echo "   docker exec -i $DB_CONTAINER psql -U postgres -d $DB_NAME -v ON_ERROR_STOP=1 < migration_XX.sql"
 
-echo ">> nginx"
-[ -f "$NGINX_SITE" ] && cp "$NGINX_SITE" "$NGINX_SITE.bak"
-cp "$SRC/nginx.conf" "$NGINX_SITE"
-nginx -t && systemctl reload nginx
+echo ">> Reiniciar backend"
+docker restart "$CONTAINER" > /dev/null
+sleep 3
 
-echo ">> Reiniciar servicio"
-# Opción A — Docker:
-# docker restart $SERVICE_NAME
-# Opción B — systemd:
-systemctl restart $SERVICE_NAME
-
-echo ""
-echo ">> DEPLOY OK"
-echo ">> Verifica: curl -s https://tutoringles.example.com/health"
+echo ">> Comprobar salud"
+if curl -fsS "$URL/health" > /dev/null; then
+  echo ""
+  echo ">> DEPLOY OK — $URL"
+else
+  echo ""
+  echo "!! /health no responde. Últimos logs:"
+  docker logs --tail 30 "$CONTAINER"
+  exit 1
+fi

@@ -1,33 +1,50 @@
 {
-  "name": "TutorIngles",
-  "short_name": "TutorIngles",
-  "description": "PWA personal para aprender inglés A2→C1 Cambridge CAE con SRS, gramática y simulacros.",
+  "name": "TutorInglés",
+  "short_name": "TutorInglés",
+  "description": "El inglés de tu día a día primero, y el del Cambridge C1 después.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0A0A0F",
-  "theme_color": "#00E5CC",
+  "background_color": "#d4e8f5",
+  "theme_color": "#d4e8f5",
   "lang": "es",
+  "dir": "ltr",
   "categories": ["education", "productivity"],
   "icons": [
     {
-      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='192' height='192' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='32' fill='%230A0A0F'/%3E%3Ctext x='96' y='130' font-family='serif' font-size='100' text-anchor='middle' fill='%2300E5CC'%3EEN%3C/text%3E%3C/svg%3E",
+      "src": "src/img/icon-192.png",
       "sizes": "192x192",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='512' height='512' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='80' fill='%230A0A0F'/%3E%3Ctext x='256' y='340' font-family='serif' font-size='260' text-anchor='middle' fill='%2300E5CC'%3EEN%3C/text%3E%3C/svg%3E",
+      "src": "src/img/icon-512.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='512' height='512' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' fill='%230A0A0F'/%3E%3Ctext x='256' y='340' font-family='serif' font-size='260' text-anchor='middle' fill='%2300E5CC'%3EEN%3C/text%3E%3C/svg%3E",
+      "src": "src/img/icon-maskable-512.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Situación de hoy",
+      "short_name": "Trabajo",
+      "description": "La situación de tu sector que toca hoy",
+      "url": "/?s=work",
+      "icons": [{ "src": "src/img/icons/work.png", "sizes": "256x256" }]
+    },
+    {
+      "name": "Repasar vocabulario",
+      "short_name": "Repasar",
+      "description": "Las palabras que tocan hoy",
+      "url": "/?s=vocab",
+      "icons": [{ "src": "src/img/icons/vocab.png", "sizes": "256x256" }]
     }
   ]
 }

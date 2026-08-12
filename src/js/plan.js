@@ -13,7 +13,7 @@ async function loadPlanToday() {
       card.innerHTML = `
         <div class="card-title">PLAN DE 30 DÍAS</div>
         <p style="font-size:0.8rem;color:var(--text-2);line-height:1.6;margin-bottom:14px">
-          Un sprint guiado hacia el C1: cada día un lote de vocabulario, un foco de gramática y una tarea de speaking, con mini-simulacros por el camino.
+          Un sprint guiado: cada día una situación real de tu trabajo, un lote de vocabulario, un foco de gramática y una tarea de speaking, con mini-simulacros por el camino.
         </p>
         <button class="btn btn-primary" onclick="startPlan()">EMPEZAR PLAN →</button>`;
       return;
@@ -30,16 +30,22 @@ async function loadPlanToday() {
       <div class="progress-bar" style="margin:8px 0 12px"><div class="progress-fill" style="width:${pct}%"></div></div>
       ${p.focus ? `<p style="font-size:0.82rem;color:var(--text-2);line-height:1.55;margin-bottom:12px">${p.focus}</p>` : ''}
       <div class="plan-tasks" style="display:flex;flex-direction:column;gap:8px">
+        ${p.situation_title ? `
+        <button class="quick-btn ${p.situation_done ? 'done' : ''}" style="flex-direction:row;justify-content:flex-start;gap:10px;padding:11px 14px" onclick="goTo('work')">
+          <span><img src="src/img/icons/work.png" alt="" class="ico"></span>
+          <span style="font-size:0.76rem;flex:1;text-align:left">Tu trabajo · ${p.situation_title}</span>
+          ${p.situation_done ? '<span style="color:var(--success);font-size:0.8rem">✓</span>' : ''}
+        </button>` : ''}
         <button class="quick-btn" style="flex-direction:row;justify-content:flex-start;gap:10px;padding:11px 14px" onclick="goTo('vocab')">
-          <span>📖</span><span style="font-size:0.76rem">Vocabulario · ${p.vocab_target || 15} palabras</span>
+          <span><img src="src/img/icons/vocab.png" alt="" class="ico"></span><span style="font-size:0.76rem">Vocabulario · ${p.vocab_target || 15} palabras</span>
         </button>
         ${p.grammar_title ? `
         <button class="quick-btn" style="flex-direction:row;justify-content:flex-start;gap:10px;padding:11px 14px" onclick="goTo('gram')">
-          <span>📝</span><span style="font-size:0.76rem">Gramática · ${p.grammar_title}</span>
+          <span><img src="src/img/icons/gram.png" alt="" class="ico"></span><span style="font-size:0.76rem">Gramática · ${p.grammar_title}</span>
         </button>` : ''}
         ${p.speaking_task ? `
         <div class="quick-btn" style="flex-direction:row;justify-content:flex-start;gap:10px;padding:11px 14px;cursor:default;align-items:flex-start">
-          <span>🗣️</span><span style="font-size:0.74rem;color:var(--text-2);line-height:1.4">${p.speaking_task}</span>
+          <span><img src="src/img/icons/speak.png" alt="" class="ico"></span><span style="font-size:0.74rem;color:var(--text-2);line-height:1.4">${p.speaking_task}</span>
         </div>
         <button class="btn btn-subtle btn-sm" onclick="goTo('speak')">IR A SPEAKING →</button>` : ''}
         ${p.is_mock ? `
@@ -53,9 +59,9 @@ async function loadPlanToday() {
 async function startPlan() {
   try {
     await apiPost('/plan/start', {});
-    toast('🚀 ¡Plan iniciado! Día 1 de 30', 'success');
+    toast('¡Plan iniciado! Día 1 de 30', 'success');
     loadPlanToday();
   } catch (e) {
-    toast(`Error: ${e.message}`, 'error');
+    toastError(e);
   }
 }
