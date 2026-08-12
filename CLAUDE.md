@@ -165,18 +165,46 @@ tarjeta que activa los avisos). Por eso aquí es `vozEsIOS`. Para comprobarlo de
 los `<script>` de index.html en orden y buscar identificadores repetidos: hoy son 236 y ninguno
 choca.
 
-### Los pares mínimos NO se graban, y es a propósito
+### Los pares mínimos SÍ se graban, pero par por par (12-ago-2026)
 
-Antes de grabar nada se midió si Emily contrasta los pares. **No contrasta el más importante:**
-`ship` 472 ms contra `sheep` 482 ms de voz real —un 2 %— cuando en inglés la vocal larga dura
-entre una vez y media y dos veces la corta. Los demás sí (`bit`/`beat` +23 %, `bus`/`buzz` +32 %,
-`ban`/`van` +24 %), pero en un ejercicio que consiste EN DISTINGUIR dos sonidos, un audio que no
-los distingue enseña lo contrario de lo que pretende, y encima suena convincente.
+**Durante trece días el entrenador de oído sonó con la voz del móvil, y en un aparato
+configurado en español la b y la v son literalmente el mismo sonido.** El marcador de b/v se
+quedó en **5 aciertos y 7 fallos — 42 %, por debajo de tirar una moneda**: con dos opciones,
+acertar menos de la mitad significa que no había nada que oír.
 
-Por eso el entrenador de oído llama a **`pronDecirSinGrabar()`** (pron.js), que fuerza la voz del
-sistema. No basta con no grabar los pares: el audio se busca por texto y `cheap` está grabado
-como palabra del vocabulario, así que aparecería igual en el par `chip`/`cheap`. La regla vive en
-quien reproduce, no en quien graba.
+**El error de método que lo causó.** La primera vez se midió la DURACIÓN de `ban`/`van` (+24 %)
+y se dio por hecho que Emily contrastaba b y v. La duración no distingue b de v: las separa el
+modo de articulación —la b cierra los labios y explota, la v los deja abiertos y roza los
+dientes—. Ese +24 % no probaba nada sobre b/v. Medida con el criterio correcto (reparto de
+energía por bandas), **Emily separa b y v entre 3,6 y 36,7 dB**: los distingue perfectamente.
+
+Ahora cada par se mide con **el criterio que corresponde a su rasgo** (`tools/cortar-pares.js`)
+y el resultado se guarda **por par** en `pron_pairs.audio_ok`:
+
+| Contraste | Con audio | Qué se midió |
+|---|---|---|
+| b/v · s/z · th · dj/y · e-fantasma · h | 6/6, 6/6, 6/6, 4/4, 8/8, 6/6 | separación por bandas |
+| æ/e · sh/ch · r/l | 5/6, 5/6, 4/5 | separación por bandas |
+| n/ŋ | 3/5 | separación por bandas |
+| **i corta/larga · u corta/larga** | **1/8 y 0/5** | duración |
+
+**Seed Audio no alarga la vocal larga, y es sistemático:** `full`/`fool` sale ×0,50 y
+`pull`/`pool` ×0,39 — la larga dura la MITAD que la corta. Esos 12 pares se quedan sin audio y
+siguen con la voz del móvil, avisado en pantalla. No es un fallo del corte: es que el modelo no
+tiene ese contraste.
+
+El rechazo es **por par y no por palabra**: `sheep` no contrasta con `ship` pero sí con `cheap`,
+así que su audio se conserva y lo que se apaga es el par malo. Y hay tope superior además de
+mínimo (1,15–2,5): un ×2,9 no es un contraste buenísimo, es un corte mal asignado.
+
+`pronDecirSinGrabar()` sigue existiendo, pero ya no manda sobre todo el entrenador: quien decide
+es `audio_ok` de cada par.
+
+**Trampa del cortado:** las palabras muy cortas y monosilábicas (`and`, `bad`, `bed`, `man`…) el
+modelo las dice pegadas y `silencedetect` no encuentra las pausas — satura en 4 silencios para 6
+palabras y no hay umbral que lo arregle. Ahí la solución no es bajar el umbral sino **generar
+cada palabra por separado**: sin corte no hay forma de asignar el audio equivocado, que es el
+único error que no se puede permitir. 36 de las 132 se generaron así.
 
 **Toda la app suena con la misma voz (Emily): 148 frases + 248 palabras.** Las palabras se
 buscan **por texto, no por id** (`porTexto` en `index.json`, y `audioDePalabra()` en voz.js).
@@ -275,6 +303,74 @@ modelo empieza a comerse pausas.**
 **Estado a 2-ago-2026: las 148 frases tienen audio real** (3,1 MB en `src/audio/`), verificadas
 una a una: ritmo entre 7,8 y 26,5 letras/s, sin duplicados y con `index.json` cuadrando.
 
+## La hora es la del usuario, no la del servidor
+
+El contenedor corre en **UTC y sin variable TZ**. Mientras la app usó `getHours()` y
+`toISOString()`, vivió dos horas por detrás de quien la usa, y salía por dos sitios:
+
+- **Los avisos llegaban a las 22:30.** Con `push_hora = 20:30` el planificador comparaba contra
+  Greenwich. Verificado en las 13 filas de `push_log`: todas a las 22:30 de España. En una app
+  cuya única métrica es que se abra, el recordatorio de "cinco minutos de inglés" llegaba cuando
+  ya estás en la cama.
+- **El día cambiaba a las 2 de la madrugada.** Estudiar a la 01:00 se apuntaba al día anterior:
+  rompía la racha sin motivo.
+
+Se arregla en **`lib/fechas.js`** (`fechaEnZona`, `minutosEnZona`, `ayerEnZona`) y no con
+`TZ=Europe/Madrid` en el contenedor: se levantó con `docker run` sin compose, así que recrearlo
+para añadir una variable tiene más riesgo que arreglarlo en código. `todayStr()` sale de ahí y
+**los `CURRENT_DATE` de las consultas se sustituyeron por esa fecha** — si no, la app y Postgres
+discrepan sobre qué día es entre las 00:00 y las 02:00.
+
+## El aviso ya no se pierde si falla el envío
+
+El candado de `push_log` se ponía **antes** de enviar. Si el envío fallaba, el `catch` lo
+registraba pero la fila ya bloqueaba el reintento: ese día se quedaba sin aviso. Ahora se
+consulta antes y **se escribe después de que el envío salga**, con un flag en memoria
+(`_avisoEnCurso`) para que un envío lento no se solape con el tic siguiente.
+
+Y el motivo se guarda en `titulo` cuando no se envía: antes, "ya había estudiado" y "el envío
+falló" dejaban la misma fila vacía con `enviados=0` y no había forma de distinguirlas.
+
+## Cámara lenta
+
+A la **segunda** pulsación de escuchar, la palabra se repite más despacio (`pronOir` en pron.js;
+el contador se reinicia en cada pregunta). Tres cosas que no son obvias:
+
+- **Los dos motores van al revés.** En el mp3 el navegador hace time-stretch y aguanta bien:
+  `VOZ_LENTO_MP3 = 0.7`. En la voz del sistema el `rate` re-sintetiza y por debajo de 0,85 suena
+  a robot, así que ahí lento es `0.85` y poco más.
+- **`preservesPitch` se queda en `true` SIEMPRE.** Bajar el tono desplaza las formantes, y las
+  formantes son lo que define qué vocal oyes: una /ɪ/ ralentizada "a lo cinta" puede percibirse
+  como otra vocal. En una app de fonética eso enseña el sonido equivocado con mucho aplomo.
+- **No sirve para todo, y por eso existe `pron_contrasts.lento_ok`.** Ralentizar alarga lo
+  estacionario (las vocales) y **emborrona los transitorios**. Medido sobre el audio del propio
+  proyecto con `atempo=0.7`: la duración total sube un 40 % en los cuatro casos, pero el ataque
+  no acompaña —en `avoid` la rampa de entrada de la /v/ pasa de 23,9 ms a **0**—, o sea que la v
+  ralentizada entra MÁS de golpe y se parece más a una b. Apagada en `b-v`, `sh-ch` y `dj-y`
+  (las dos últimas llevan africada). Donde sí rinde: vocales largas/cortas y los guiones de
+  listening, que es donde el problema es la velocidad y no un fonema.
+
+**No se implementa subiendo `veces`.** Hasta el 12-ago `vozDecir` sólo buscaba el audio grabado
+si `veces === 1`, así que pedir una repetición devolvía la voz del móvil a mitad de ejercicio.
+Ya está arreglado, pero la forma correcta sigue siendo una llamada nueva con `lento`.
+
+## Qué se entrena de oído y qué sólo con la boca
+
+`pron_contrasts.modo`. Dos de los doce contrastes no pueden funcionar como ejercicio de
+percepción y ofrecían una ronda de oído sin respuesta posible:
+
+- **La e fantasma.** El error es que TÚ añadas una e delante ("escuul" por school). El par
+  `school`/`cool` sólo entrena a oír si hay una /s/, que no es el problema.
+- **La r inglesa.** Los pares eran `right`/`light`, `red`/`led`: eso es R contra L, la dificultad
+  del japonés. Un español no confunde *right* con *light* — confunde la r inglesa con la rr
+  española, y esas dos no forman par mínimo porque la rr no existe en inglés.
+
+Los dos abren directamente en modo DECIRLO, con una nota que explica por qué.
+
+**Y la h se escribe `h`, no `j`.** El contraste `h-suave` explicaba que la jota es el error y
+acto seguido enseñaba la figurada como `j`. La regla está en `lib/respelling.js` con test desde
+el 30-jul; la tabla venía de la migración 16 y se quedó con el criterio viejo.
+
 ## Base de datos
 
 Postgres en el droplet, base `tutoringles` con usuario propio. Esquema por **migraciones
@@ -284,7 +380,12 @@ acumulativas idempotentes**, que se aplican a mano y en orden:
 `_04` motor (exam_questions + currículo de 30 días) → `_05` banco de 120 palabras →
 `_06` banco de 48 preguntas → `_07` sectores → `_08` contenido de tienda → `_09` plan retail →
 `_10` FSRS → `_11` reading → `_12` iconos → `_13` writing y speaking → `_14` listening →
-`_15` iconos por sector → `_16` pronunciación → `_17` AFI por par mínimo → `_18` avisos y sesión.
+`_15` iconos por sector → `_16` pronunciación → `_17` AFI por par mínimo → `_18` avisos y sesión →
+`_19` correcciones de los pares (la h, r/l, e-fantasma, AFI y orden) → `_20` qué pares tienen
+audio fiable.
+
+**La `_20` la GENERA `tools/cortar-pares.js`, no se escribe a mano**: sus `audio_ok` salen de
+medir los ficheros, así que hay que rehacerla cada vez que se regenere el audio.
 
 Tras aplicar la `_16` hay que cargar el diccionario, que no va dentro del SQL:
 ```

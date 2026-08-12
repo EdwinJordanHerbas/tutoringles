@@ -137,18 +137,83 @@ function pronDecir(texto, veces = 1, btn) {
 /**
  * Igual, pero forzando la voz del sistema aunque haya grabación.
  *
- * Es lo que usa el ENTRENADOR DE OÍDO, y no es un capricho: se midió a Emily
- * antes de grabar nada y no contrasta `ship` / `sheep` —472 ms contra 482 de
- * voz real, un 2 %, cuando la vocal larga debería durar entre una vez y media y
- * dos veces la corta—. En un ejercicio que consiste en distinguir dos sonidos,
- * un audio que no los distingue enseña justo lo contrario.
- *
- * Hace falta aquí y no basta con no grabar los pares, porque el audio se busca
- * por texto: `cheap` está grabado como palabra del vocabulario y aparecería
- * igualmente en el par `chip`/`cheap`.
+ * Sigue haciendo falta, pero ya no para todo el entrenador: ahora la decisión
+ * es POR PAR y viene de la base (`pron_pairs.audio_ok`), medida fichero a
+ * fichero por tools/cortar-pares.js. Ver `pronOir`.
  */
 function pronDecirSinGrabar(texto, veces = 1, btn) {
   vozDecir(texto, { veces, btn, sinGrabado: true });
+}
+
+// ── ESCUCHAR UN PAR ──────────────────────────────────────
+//
+// Durante trece días este ejercicio sonó con la voz del móvil para TODO, y en
+// un aparato configurado en español la b y la v son literalmente el mismo
+// sonido: el marcador de b/v se quedó en 5 aciertos y 7 fallos, un 42 %, por
+// debajo de tirar una moneda. Ahora las palabras están grabadas con la voz de
+// la app y medidas una a una — b/v salió con 15-37 dB de separación, así que
+// Emily sí las distingue; lo que no distinguía era el móvil.
+//
+// Dos cosas se deciden fuera y llegan con el par:
+//   · `audio_ok` — si el audio grabado de ESE par separa los dos sonidos. En la
+//     i corta y la i larga no lo hace (el modelo no alarga la vocal: `sheep`
+//     sale más corta que `ship`), así que esos siguen con voz del móvil.
+//   · `lento_ok` — si la cámara lenta ayuda o estorba en ese contraste.
+
+// Pulsaciones por palabra dentro de la tarjeta actual. Se reinicia al cambiar
+// de pregunta: si no, la siguiente palabra arrancaría ya en lento sin que nadie
+// lo haya pedido.
+let _pronEscuchas = {};
+const pronResetEscuchas = () => { _pronEscuchas = {}; };
+
+// Los onclick del HTML sólo pueden llevar valores sueltos, así que el par se
+// pasa por id y se busca aquí.
+const pronPar = (id) => (_pronActual?.pares || []).find((p) => p.id === id) || null;
+
+/**
+ * Escuchar una palabra del par. **A la segunda pulsación va en cámara lenta**,
+ * si el contraste lo admite.
+ *
+ * No se implementa subiendo `veces`, que sería lo natural: hasta hace nada
+ * `vozDecir` sólo miraba el audio grabado cuando `veces === 1`, así que pedir
+ * una repetición te devolvía la voz del móvil a mitad de ejercicio.
+ */
+function pronOir(palabra, btn, par) {
+  const clave  = String(palabra).toLowerCase();
+  const n      = (_pronEscuchas[clave] = (_pronEscuchas[clave] || 0) + 1);
+  const lento  = n >= 2 && _pronActual?.lento_ok !== false;
+  vozDecir(palabra, { btn, lento, sinGrabado: !par?.audio_ok });
+
+  // El botón se anuncia solo. Un botón que hace dos cosas distintas sin avisar
+  // se lee como un fallo, no como una función.
+  if (btn && n === 1 && _pronActual?.lento_ok !== false) {
+    const et = btn.querySelector('.pron-play-et');
+    if (et) et.textContent = 'OTRA VEZ, MÁS DESPACIO';
+  }
+}
+
+/**
+ * Las dos palabras del par, seguidas, con una pausa entre ellas.
+ *
+ * Antes esto mandaba el texto `"ban. van. ban."` de una pieza a la voz del
+ * sistema, y traía dos problemas: nunca podía usar audio grabado (busca la
+ * clave "ban. van. ban.", que no existe) y el sintetizador les ponía entonación
+ * de lista — la última cae, la primera sube—, así que las dos apariciones de
+ * `ban` ni siquiera sonaban igual entre sí. Encima del contraste que cuesta
+ * oír, variación de entonación.
+ */
+function pronOirLasDos(a, b, btn, par) {
+  const pausa = 700;
+  const di = (palabra, retraso) => setTimeout(() => {
+    vozDecir(palabra, { sinGrabado: !par?.audio_ok });
+  }, retraso);
+  if (btn) {
+    btn.classList.add('anim-pulse');
+    setTimeout(() => btn.classList.remove('anim-pulse'), pausa * 2 + 900);
+  }
+  vozDecir(a, { sinGrabado: !par?.audio_ok });
+  di(b, pausa);
+  di(a, pausa * 2);
 }
 
 // ── SECCIÓN PRONUNCIACIÓN ────────────────────────────────
@@ -328,6 +393,10 @@ async function abrirContraste(slug) {
   c.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
   try {
     _pronActual = await apiGet(`/pronunciation/contrasts/${slug}`);
+    // Los contrastes de sólo producción (la e fantasma, la r inglesa) no tienen
+    // ejercicio de oído posible: abrirlos en modo oído dejaba una pregunta sin
+    // respuesta correcta posible.
+    if (_pronActual?.modo === 'produccion') _pronModo = 'decir';
     prepararRonda();
     renderContraste();
   } catch (e) {
@@ -377,11 +446,20 @@ function renderContraste() {
       </div>
     </div>
 
-    <div class="vocab-filters" style="margin:12px 0">
-      <button class="filter-chip ${_pronModo === 'oido' ? 'active' : ''}" onclick="setPronModo('oido')">Oído</button>
-      <button class="filter-chip ${_pronModo === 'lectura' ? 'active' : ''}" onclick="setPronModo('lectura')">Lectura</button>
-      <button class="filter-chip ${_pronModo === 'decir' ? 'active' : ''}" onclick="setPronModo('decir')">Decirlo</button>
-    </div>
+    ${x.modo === 'produccion' ? `
+      <div class="pron-solo-boca">
+        Este no se entrena de oído: no hay dos palabras inglesas que se
+        distingan por esto. Es un error de los nuestros al hablar, así que se
+        practica diciéndolo.
+      </div>
+      <div class="vocab-filters" style="margin:12px 0">
+        <button class="filter-chip active" onclick="setPronModo('decir')">Decirlo</button>
+      </div>` : `
+      <div class="vocab-filters" style="margin:12px 0">
+        <button class="filter-chip ${_pronModo === 'oido' ? 'active' : ''}" onclick="setPronModo('oido')">Oído</button>
+        <button class="filter-chip ${_pronModo === 'lectura' ? 'active' : ''}" onclick="setPronModo('lectura')">Lectura</button>
+        <button class="filter-chip ${_pronModo === 'decir' ? 'active' : ''}" onclick="setPronModo('decir')">Decirlo</button>
+      </div>`}
 
     <div id="pron-quiz"></div>
 
@@ -389,7 +467,7 @@ function renderContraste() {
       <div class="card-title">LOS PARES</div>
       ${(x.pares || []).map((p) => `
         <div class="pron-lista-par">
-          <button class="btn-icon" onclick="pronDecirSinGrabar(${JSON.stringify(p.word_a).replace(/"/g, '&quot;')}, 1, this)" aria-label="Escuchar ${escaparAttr(p.word_a)}"><img src="src/img/icons/listen.png" alt="" class="ico"></button>
+          <button class="btn-icon" onclick="pronOir(${JSON.stringify(p.word_a).replace(/"/g, '&quot;')}, this, pronPar(${p.id}))" aria-label="Escuchar ${escaparAttr(p.word_a)}"><img src="src/img/icons/listen.png" alt="" class="ico"></button>
           <div class="pron-lista-lado">
             <div class="pron-lista-en">${escaparHtml(p.word_a)}</div>
             ${pronPalabra(p.fig_a)}
@@ -400,7 +478,7 @@ function renderContraste() {
             ${pronPalabra(p.fig_b)}
             <div class="pron-lista-es">${escaparHtml(p.es_b)}</div>
           </div>
-          <button class="btn-icon" onclick="pronDecirSinGrabar(${JSON.stringify(p.word_b).replace(/"/g, '&quot;')}, 1, this)" aria-label="Escuchar ${escaparAttr(p.word_b)}"><img src="src/img/icons/listen.png" alt="" class="ico"></button>
+          <button class="btn-icon" onclick="pronOir(${JSON.stringify(p.word_b).replace(/"/g, '&quot;')}, this, pronPar(${p.id}))" aria-label="Escuchar ${escaparAttr(p.word_b)}"><img src="src/img/icons/listen.png" alt="" class="ico"></button>
         </div>`).join('')}
     </div>
   `;
@@ -433,9 +511,14 @@ function renderPregunta() {
 
   const enunciado = _pronModo === 'oido'
     ? `<div class="pron-q-tit">¿Cuál has oído?</div>
-       <button class="btn btn-primary pron-q-play" onclick="pronDecirSinGrabar(${JSON.stringify(palabra).replace(/"/g, '&quot;')}, 1, this)">
-         <img src="src/img/icons/listen.png" alt="" class="ico"> ESCUCHAR OTRA VEZ
-       </button>`
+       <button class="btn btn-primary pron-q-play" onclick="pronOir(${JSON.stringify(palabra).replace(/"/g, '&quot;')}, this, pronPar(${p.id}))">
+         <img src="src/img/icons/listen.png" alt="" class="ico"> <span class="pron-play-et">ESCUCHAR OTRA VEZ</span>
+       </button>
+       ${p.audio_ok ? '' : `
+         <div class="pron-aviso-tts">
+           Este par suena con <b>la voz de tu móvil</b>: la grabada no separa estos dos
+           sonidos y era peor el remedio. Si no los distingues, no es cosa tuya.
+         </div>`}`
     : `<div class="pron-q-tit">¿Qué palabra se lee así?</div>
        <div class="pron-q-fig">${pronPalabra(figura, { conIpa: p.ambiguo })}</div>
        ${p.ambiguo ? '<div class="pron-q-pista">Las dos se escriben igual en figurada: fíjate en el color y en el símbolo de arriba.</div>' : ''}`;
@@ -459,8 +542,15 @@ function renderPregunta() {
     </div>
   `;
 
+  // Cada pregunta empieza de cero: la cámara lenta se gana pulsando dos veces
+  // ESTA palabra, no se hereda de la anterior.
+  pronResetEscuchas();
+
   // En modo oído se reproduce solo al entrar: es el estímulo de la pregunta.
-  if (_pronModo === 'oido') setTimeout(() => pronDecirSinGrabar(palabra, 1), 300);
+  // Cuenta como la primera escucha, así que el botón ya ofrece la lenta.
+  if (_pronModo === 'oido') {
+    setTimeout(() => pronOir(palabra, document.querySelector('.pron-q-play'), p), 300);
+  }
 }
 
 // ── MODO DECIRLO: la única medida de pronunciación que hay sin Azure ─────
@@ -613,7 +703,7 @@ function juzgarPronunciacion(alts, objetivo, otra) {
           ${alts.slice(0, 3).map((a, i) =>
             `<span class="decir-alt${i === 0 ? ' primera' : ''}">${escaparHtml(a.texto || '—')}</span>`).join('')}
         </div>
-        <button class="btn btn-subtle btn-sm" onclick="pronDecirSinGrabar(${JSON.stringify(`${objetivo}. ${otra}. ${objetivo}.`).replace(/"/g, '&quot;')}, 1, this)">
+        <button class="btn btn-subtle btn-sm" onclick="pronOirLasDos(${JSON.stringify(objetivo).replace(/"/g, '&quot;')}, ${JSON.stringify(otra).replace(/"/g, '&quot;')}, this, pronPar(${q.par.id}))">
           <img src="src/img/icons/listen.png" alt="" class="ico"> OÍR LAS DOS
         </button>
       </div>
@@ -653,7 +743,7 @@ function responderPron(elegida) {
           <div><span class="pron-fb-en">${escaparHtml(buena)}</span> ${pronPalabra(figBuena, { conIpa: true })}</div>
           <div class="pron-fb-otra"><span class="pron-fb-en">${escaparHtml(otra)}</span> ${pronPalabra(figOtra, { conIpa: true })}</div>
         </div>
-        <button class="btn btn-subtle btn-sm" onclick="pronDecirSinGrabar(${JSON.stringify(`${buena}. ${otra}. ${buena}.`).replace(/"/g, '&quot;')}, 1, this)">
+        <button class="btn btn-subtle btn-sm" onclick="pronOirLasDos(${JSON.stringify(buena).replace(/"/g, '&quot;')}, ${JSON.stringify(otra).replace(/"/g, '&quot;')}, this, pronPar(${p.id}))">
           <img src="src/img/icons/listen.png" alt="" class="ico"> OÍRLAS SEGUIDAS
         </button>
       </div>

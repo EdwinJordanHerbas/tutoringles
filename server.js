@@ -115,6 +115,7 @@ const pron        = require('./lib/pronunciacion');
 const guiaSonidos = require('./lib/guia-sonidos');
 const introPron   = require('./lib/intro-pronunciacion');
 const avisos      = require('./lib/avisos');
+const fechas      = require('./lib/fechas');
 
 // Claves VAPID de las notificaciones. Sin ellas la app funciona igual, solo que
 // sin avisos: la clave privada firma cada envío y no puede ir en el repositorio.
@@ -206,7 +207,12 @@ app.get('/health', async (req, res) => {
   }
 });
 
-const todayStr = () => new Date().toISOString().split('T')[0];
+// Qué día es PARA EL USUARIO. Con `toISOString()` esto devolvía el día en UTC,
+// así que entre las 00:00 y las 02:00 de España el servidor seguía creyendo que
+// era ayer: una sesión de madrugada se apuntaba al día anterior y la racha se
+// rompía sin motivo. Se usa en 27 sitios, así que el arreglo va aquí y no en
+// cada consulta. Ver lib/fechas.js.
+const todayStr = () => fechas.fechaEnZona();
 
 // Recalcula la racha del día indicado y actualiza streak_max en config.
 // Un día "cuenta" si tiene alguna meta hecha (vocab, gramática o speaking).
@@ -643,8 +649,10 @@ app.get('/stats', async (req, res) => {
       db("SELECT value FROM config WHERE key='xp_total'"),
       db("SELECT COUNT(*) AS cnt FROM user_words WHERE status='mastered' AND profile_id=$1", [PROFILE_ID]),
       db('SELECT streak FROM daily_goals WHERE profile_id=$1 ORDER BY date DESC LIMIT 1', [PROFILE_ID]),
+      // La ventana de 7 días se cuenta desde el día del usuario, no desde el
+      // CURRENT_DATE de Postgres, que va en UTC como el resto del servidor.
       db(`SELECT COUNT(*) AS cnt FROM study_sessions
-          WHERE profile_id=$1 AND date >= CURRENT_DATE - INTERVAL '7 days'`, [PROFILE_ID]),
+          WHERE profile_id=$1 AND date >= $2::date - INTERVAL '7 days'`, [PROFILE_ID, todayStr()]),
       db(`SELECT section, AVG(score::float/max_score*100) AS avg_pct FROM exam_attempts
           WHERE profile_id=$1 GROUP BY section`, [PROFILE_ID]),
       db('SELECT COUNT(*) AS cnt FROM study_sessions WHERE profile_id=$1', [PROFILE_ID]),
@@ -1309,7 +1317,10 @@ app.get('/sesion-diaria', async (req, res) => {
           WHERE situation_id = $1 AND kind = 'key' ORDER BY order_index`, [sit[0].id]
       );
       if (lineas.length) {
-        const elegida = lineas[new Date().getDate() % lineas.length];
+        // Rota por día del usuario: con getDate() del servidor, la frase de la
+        // sesión cambiaba a las 2 de la madrugada en vez de a medianoche.
+        const diaDelMes = Number(todayStr().split('-')[2]);
+        const elegida = lineas[diaDelMes % lineas.length];
         await conFigurada([elegida], 'en');
         frase = { ...elegida, situacion: sit[0] };
       }
@@ -1483,42 +1494,71 @@ async function datosDelAviso() {
  * El registro en push_log evita el duplicado clásico: si el contenedor se
  * reinicia dentro de la ventana horaria, el aviso ya está marcado como enviado.
  */
+/**
+ * Deja constancia de cómo acabó el aviso de un día. El motivo va en `titulo`
+ * cuando no se envió: antes, "ya había estudiado" y "el envío falló" dejaban
+ * exactamente la misma fila vacía con enviados=0, y desde fuera no había forma
+ * de distinguir un día bien resuelto de uno roto.
+ */
+function registrarAviso(fecha, titulo, cuerpo, enviados) {
+  return db(
+    `INSERT INTO push_log (profile_id, fecha, tipo, titulo, cuerpo, enviados)
+     VALUES ($1, $2, 'diario', $3, $4, $5)
+     ON CONFLICT (profile_id, fecha, tipo) DO UPDATE
+       SET titulo = EXCLUDED.titulo, cuerpo = EXCLUDED.cuerpo, enviados = EXCLUDED.enviados`,
+    [PROFILE_ID, fecha, titulo, cuerpo, enviados]);
+}
+
+// Un envío lento no puede solaparse con el tic siguiente. Antes esto lo cubría
+// el INSERT del candado; ahora que el candado se pone al final, hace falta.
+let _avisoEnCurso = false;
+
 function arrancarPlanificador() {
   if (!avisos.estaConfigurado()) {
     console.log('· Avisos:   SIN CLAVES — pon VAPID_PUBLIC/VAPID_PRIVATE o un vapid.json');
     return;
   }
-  console.log('· Avisos:   ACTIVOS — el planificador comprueba cada minuto');
+  console.log(`· Avisos:   ACTIVOS — cada minuto, en hora de ${fechas.ZONA}`);
   setInterval(async () => {
+    if (_avisoEnCurso) return;
+    _avisoEnCurso = true;
     try {
       const { rows: cfg } = await db("SELECT value FROM config WHERE key='push_hora'");
       if (!avisos.tocaAvisar(cfg[0]?.value || '20:30')) return;
 
-      // ¿Ya se mandó hoy? La clave única (profile_id, fecha, tipo) es el candado.
-      const { rowCount } = await db(
-        `INSERT INTO push_log (profile_id, fecha, tipo) VALUES ($1, CURRENT_DATE, 'diario')
-         ON CONFLICT (profile_id, fecha, tipo) DO NOTHING`, [PROFILE_ID]);
-      if (!rowCount) return;
+      const hoy = todayStr();
+
+      // ¿Ya se resolvió el aviso de hoy? Se CONSULTA, no se reserva. Reservar
+      // antes de enviar significaba que un fallo de red se llevaba por delante
+      // el aviso del día entero: la fila ya existía, así que el reintento del
+      // minuto siguiente se daba por hecho y nadie recibía nada.
+      const { rows: yaHay } = await db(
+        "SELECT 1 FROM push_log WHERE profile_id=$1 AND fecha=$2 AND tipo='diario'", [PROFILE_ID, hoy]);
+      if (yaHay.length) return;
 
       // Si ya ha estudiado hoy, no se le da la lata.
       const { rows: hecho } = await db(
-        `SELECT 1 FROM daily_goals WHERE profile_id=$1 AND date=CURRENT_DATE
-           AND (vocab_done>0 OR grammar_done OR speaking_done)`, [PROFILE_ID]);
-      if (hecho.length) return;
+        `SELECT 1 FROM daily_goals WHERE profile_id=$1 AND date=$2
+           AND (vocab_done>0 OR grammar_done OR speaking_done)`, [PROFILE_ID, hoy]);
+      if (hecho.length) return registrarAviso(hoy, 'sin enviar: ya había estudiado', '', 0);
 
       const { rows: subs } = await db('SELECT * FROM push_subscriptions WHERE profile_id=$1', [PROFILE_ID]);
-      if (!subs.length) return;
+      if (!subs.length) return registrarAviso(hoy, 'sin enviar: ningún dispositivo suscrito', '', 0);
 
       const payload = { ...avisos.componerAviso(await datosDelAviso()), url: '/?sesion=1' };
       const { ok, caducadas } = await avisos.enviar(subs, payload);
       await limpiarCaducadas(caducadas);
-      await db(
-        `UPDATE push_log SET titulo=$1, cuerpo=$2, enviados=$3
-          WHERE profile_id=$4 AND fecha=CURRENT_DATE AND tipo='diario'`,
-        [payload.titulo, payload.cuerpo, ok, PROFILE_ID]);
+
+      // El candado se pone DESPUÉS de que el envío haya salido. Si no salió, no
+      // se escribe nada y el minuto siguiente lo vuelve a intentar mientras dure
+      // la ventana de 15 minutos.
+      if (!ok) return console.error('[avisos] ningún envío aceptado, se reintenta al minuto');
+      await registrarAviso(hoy, payload.titulo, payload.cuerpo, ok);
       console.log(`[avisos] enviado a ${ok} dispositivo(s): ${payload.cuerpo}`);
     } catch (e) {
       console.error('[avisos] planificador:', e?.message || e);
+    } finally {
+      _avisoEnCurso = false;
     }
   }, 60_000);
 }

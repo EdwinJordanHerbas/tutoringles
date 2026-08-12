@@ -718,3 +718,33 @@
   .pron-opciones   { grid-template-columns: 1fr; }
   .pron-par-grande { font-size: 1.2rem; gap: 8px; }
 }
+
+/* Aviso de los contrastes que sólo se entrenan hablando (la e fantasma, la r
+   inglesa). Antes ofrecían una ronda de oído en la que no había nada que oír:
+   ninguna de las dos palabras suena "mal", porque el error no está en el
+   inglés, está en lo que le añadimos nosotros. */
+.pron-solo-boca {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 3px solid var(--acento, #7bd);
+  font-size: 0.76rem;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+/* Cuando un par no tiene audio grabado que contraste de verdad. Decirlo importa:
+   el ejercicio de b/v se pasó trece días sonando con la voz del móvil —que en
+   español no distingue b de v— y el marcador cayó al 42 %, por debajo del azar,
+   sin que nada en pantalla diera una pista de por qué. */
+.pron-aviso-tts {
+  margin: -4px 0 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 190, 90, 0.10);
+  border-left: 3px solid rgba(255, 190, 90, 0.55);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--text-2);
+}

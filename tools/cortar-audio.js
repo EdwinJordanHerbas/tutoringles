@@ -236,7 +236,7 @@ function escribirManifiesto() {
   // no, grabar los ejemplos de SONIDOS borraría del índice el vocabulario.
   const porTexto = {};
   const conAudio = new Set(palabras);
-  for (const nombre of ['mapa-palabras.json', 'mapa-sonidos.json']) {
+  for (const nombre of ['mapa-palabras.json', 'mapa-sonidos.json', 'mapa-pares.json']) {
     const fMapa = path.join(DIR_A, nombre);
     if (!fs.existsSync(fMapa)) continue;
     for (const b of JSON.parse(fs.readFileSync(fMapa, 'utf8'))) {
@@ -372,4 +372,12 @@ if (require.main === module) {
   main().catch((e) => { console.error('ERROR:', e.message); process.exit(1); });
 }
 
-module.exports = { nOraciones, tramosDeVoz, repartoCoherente, fusionarHastaMinimo };
+module.exports = {
+  nOraciones, tramosDeVoz, repartoCoherente, fusionarHastaMinimo,
+  // Lo usa tools/cortar-pares.js, que corta el mismo tipo de material con las
+  // mismas reglas (44,1 kHz por iOS, -16 LUFS con ganancia fija) pero con su
+  // propia verificación: en los pares mínimos no basta con que el corte cuadre,
+  // hace falta que los dos sonidos se distingan de verdad.
+  medirLufs, duracionDe, ff, clavePalabra, escribirManifiesto,
+  LUFS_OBJETIVO, DESTINO, RITMOS,
+};

@@ -170,6 +170,25 @@ function audioDePalabra(texto) {
   return id == null ? null : id;
 }
 
+// ── CÁMARA LENTA ─────────────────────────────────────────
+//
+// Ralentizar sirve para oír lo que va DEMASIADO RÁPIDO, no para separar dos
+// sonidos parecidos. Los dos motores además se portan al revés:
+//
+// - En el mp3 el navegador hace time-stretch (mantiene el tono y alarga la
+//   señal). Con vocales, que son estacionarias, sale limpio. 0,7 es el suelo:
+//   por debajo los artefactos ya se oyen.
+// - En la voz del sistema el `rate` RE-SINTETIZA, y por debajo de 0,85 los
+//   sintetizadores de móvil estiran los fonemas y suenan a robot. Así que
+//   aquí lento significa mucho menos lento.
+//
+// Y `preservesPitch` se queda en true SIEMPRE. Bajar el tono desplaza las
+// formantes, y las formantes son lo que define qué vocal oyes: una /ɪ/
+// ralentizada "a lo cinta" puede percibirse como otra vocal distinta. En una
+// app de fonética eso es enseñar el sonido equivocado con mucho aplomo.
+const VOZ_LENTO_MP3 = 0.7;
+const VOZ_LENTO_TTS = 0.85;
+
 // ── REPRODUCCIÓN ─────────────────────────────────────────
 
 let _audio = null;             // <audio> en curso, para poder cortarlo
@@ -197,7 +216,8 @@ function vozParar() {
  *   btn   botón al que animar mientras suena
  */
 function vozDecir(texto, opciones = {}) {
-  const { rate = 0.9, veces = 1, btn = null, lang = 'en-GB', sinGrabado = false } = opciones;
+  const { veces = 1, btn = null, lang = 'en-GB', sinGrabado = false, lento = false } = opciones;
+  const rate = opciones.rate ?? (lento ? VOZ_LENTO_TTS : 0.9);
 
   // Si esa palabra está grabada, se oye la grabada. Se comprueba AQUÍ y no en
   // cada pantalla a propósito: VOCABULARIO, SONIDOS y la sesión llaman todas a
@@ -205,7 +225,13 @@ function vozDecir(texto, opciones = {}) {
   // tres pasan a sonar con la misma voz sin tocar una línea de ellas. Y de paso
   // desaparece el problema de iOS con los enunciados de una sola palabra, que
   // es justo donde se notaba.
-  const idPal = (veces === 1 && !sinGrabado) ? audioDePalabra(texto) : null;
+  //
+  // La búsqueda ya no depende de `veces`. Antes era `veces === 1 && …`, así que
+  // pedir dos repeticiones de una palabra grabada devolvía la voz del móvil en
+  // vez de la de la app: cambiaba de voz a mitad de ejercicio, justo cuando se
+  // está intentando afinar el oído. Nadie llamaba con veces>1 todavía, así que
+  // nunca llegó a verse.
+  const idPal = sinGrabado ? null : audioDePalabra(texto);
   if (idPal != null) return vozReproducir(`src/audio/word-${idPal}.mp3`, btn, texto, opciones);
 
   if (!('speechSynthesis' in window)) {
@@ -295,9 +321,12 @@ function pararGuardia() {
  * todo lo que venga después.
  */
 function vozReproducir(url, btn, textoRespaldo, opciones = {}) {
+  const { veces = 1, lento = false } = opciones;
   vozParar();
   const a = new Audio(url);
   _audio = a;
+  let quedan = Math.max(1, veces);
+
   const soltar = () => {
     if (btn) btn.classList.remove('anim-pulse');
     a.pause();
@@ -305,8 +334,29 @@ function vozReproducir(url, btn, textoRespaldo, opciones = {}) {
     a.load();
     if (_audio === a) _audio = null;
   };
+
+  // Se aplica dos veces —ahora y al llegar los metadatos— porque algunos
+  // navegadores reinician `playbackRate` al cargar el fichero, y entonces la
+  // cámara lenta se pierde justo la primera vez que se usa.
+  const aplicarVelocidad = () => {
+    a.preservesPitch = true;
+    a.webkitPreservesPitch = true;    // Safari lo llevó con prefijo mucho tiempo
+    a.playbackRate = lento ? VOZ_LENTO_MP3 : 1;
+  };
+  aplicarVelocidad();
+  a.onloadedmetadata = aplicarVelocidad;
+
   if (btn) btn.classList.add('anim-pulse');
-  a.onended = soltar;
+  a.onended = () => {
+    if (--quedan <= 0) return soltar();
+    // Una pausa entre repeticiones: pegadas se oyen como una sola palabra larga.
+    setTimeout(() => {
+      if (_audio !== a) return;        // lo han cortado mientras esperábamos
+      aplicarVelocidad();
+      a.currentTime = 0;
+      a.play().catch(soltar);
+    }, 350);
+  };
   a.onerror = soltar;
   a.play().catch(() => {
     soltar();
