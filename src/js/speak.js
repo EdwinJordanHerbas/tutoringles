@@ -29,9 +29,11 @@ let _lastScore     = null;
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 // ── INIT ─────────────────────────────────────────────────
-function initSpeak() {
+// `forzar` lo usa el botón de VOLVER de una tarea del oral: esa tarea ha pintado
+// encima de esta sección, así que hay que repintarla aunque ya estuviera hecha.
+function initSpeak(forzar = false) {
   const container = document.getElementById('speak-content');
-  if (!container || _speakInited) return;
+  if (!container || (_speakInited && !forzar)) return;
   _speakInited = true;
   renderSpeakSection();
 }
@@ -69,6 +71,18 @@ function renderSpeakSection() {
       </div>
     </div>
 
+    <!-- Las 5 tareas del oral del C1 vivían dentro de EXAMEN, y EXAMEN salió de
+         la barra el 2-ago. Como sólo las cargaba exam.js, se quedaron
+         inalcanzables sin que nadie lo notara: speaking_practice llevaba cero
+         filas desde julio. Su sitio es éste, que es la pestaña de hablar. -->
+    <div class="glass-card-accent" style="margin-top:8px">
+      <div class="card-title">LAS 4 PARTES DEL ORAL · C1</div>
+      <p style="font-size:0.72rem;color:var(--text-3);margin-bottom:10px">
+        Con cronómetro para el minuto seguido. El examen es el 1 de diciembre.
+      </p>
+      <div id="speaking-tasks"><div class="empty-state" style="padding:8px 0"><div class="spinner"></div></div></div>
+    </div>
+
     <div class="glass-card" style="margin-top:8px">
       <div class="card-title">TIPS CAMBRIDGE CAE</div>
       <div style="font-size:0.78rem;color:var(--text-2);line-height:1.7">
@@ -87,6 +101,8 @@ function renderSpeakSection() {
 
   loadSpeakHistory();
   cargarPronFrase();
+  // Vive en writing.js (comparte pantalla con las tareas escritas del C1).
+  if (typeof loadSpeakingTasks === 'function') loadSpeakingTasks();
 }
 
 // Pide al servidor cómo se lee la frase del día. El banco de frases de esta
@@ -204,7 +220,7 @@ async function saveSpeak() {
       notes: _currentPhrase.topic
     });
     // Marcar meta de speaking como completada
-    const today = new Date().toISOString().split('T')[0];
+    const today = hoyLocal();
     await apiPut(`/daily-goals/${today}`, { speaking_done: true });
     toast('Práctica guardada', 'success');
     await apiPost('/study-sessions', { type: 'speaking', duration_minutes: 5 });

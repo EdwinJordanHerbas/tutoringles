@@ -1084,3 +1084,25 @@
   transition: color .2s ease;
 }
 .sp-clock.warning { color: var(--warning); animation: pulse-glow 1s ease infinite; }
+
+/* Progreso dentro de una situación. Las frases se practican por tandas de
+   cuatro: doce seguidas con micrófono era lo que hacía que nadie entrase, así
+   que la barra tiene que dejar claro que se puede parar y retomar. */
+.wk-tanda { margin-bottom: 12px; }
+.wk-tanda-barra {
+  height: 4px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.wk-tanda-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: var(--acento, #7bd);
+  transition: width .35s ease;
+}
+.wk-tanda-et {
+  margin-top: 6px;
+  font-size: 0.7rem;
+  color: var(--text-3);
+}

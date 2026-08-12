@@ -45,8 +45,19 @@ async function loadWritingTasks() {
   }
 }
 
+// Writing tiene sección propia (ESCRIBIR) desde el 12-ago, así que ya no pinta
+// dentro del panel de SIMULACROS: escribe en su propio contenedor y la lista de
+// tareas se esconde mientras se redacta.
+const _wrCaja = () => document.getElementById('writing-editor');
+function _wrListaVisible(visible) {
+  const lista = document.getElementById('writing-tasks')?.closest('.glass-card-accent');
+  if (lista) lista.style.display = visible ? '' : 'none';
+}
+
 async function openWriting(slug) {
-  const c = document.getElementById('exam-content');
+  const c = _wrCaja();
+  if (!c) return;
+  _wrListaVisible(false);
   c.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
   try {
     _wrTask = await apiGet(`/writing/tasks/${slug}`);
@@ -56,13 +67,22 @@ async function openWriting(slug) {
   }
 }
 
+/** Cierra el editor y vuelve a la lista de tareas. */
+function cerrarWriting() {
+  const c = _wrCaja();
+  if (c) c.innerHTML = '';
+  _wrListaVisible(true);
+  loadWritingTasks();
+}
+
 function renderWriting() {
   const t = _wrTask;
   const guia = Array.isArray(t.guidance) ? t.guidance : [];
-  const c = document.getElementById('exam-content');
+  const c = _wrCaja();
+  if (!c) return;
 
   c.innerHTML = `
-    <button class="btn btn-subtle btn-sm" onclick="renderExamDashboard()" style="margin-bottom:12px">← VOLVER</button>
+    <button class="btn btn-subtle btn-sm" onclick="cerrarWriting()" style="margin-bottom:12px">← VOLVER</button>
 
     <div class="glass-card-accent anim-slide-up">
       <div class="card-title">WRITING · PART ${t.part} · ${t.kind.toUpperCase()}</div>
@@ -161,8 +181,7 @@ async function saveWriting() {
       ? `Guardado · ${Object.values(s).reduce((a, b) => a + b, 0)}/20`
       : `Guardado · ${r.word_count} palabras`, 'success');
     showXpPop(25);
-    _examInited = false;
-    renderExamDashboard();
+    cerrarWriting();
   } catch (e) {
     toastError(e);
   }
@@ -193,7 +212,9 @@ async function loadSpeakingTasks() {
 function openSpeaking(slug) {
   const t = _spTasks.find(x => x.slug === slug);
   if (!t) return;
-  const c = document.getElementById('exam-content');
+  // Estas tareas se pintan ahora dentro de HABLAR, que es donde tienen sentido.
+  const c = document.getElementById('speak-content');
+  if (!c) return;
   const tips = Array.isArray(t.tips) ? t.tips : [];
   const p = t.prompts;
 
@@ -215,7 +236,7 @@ function openSpeaking(slug) {
   }
 
   c.innerHTML = `
-    <button class="btn btn-subtle btn-sm" onclick="renderExamDashboard()" style="margin-bottom:12px">← VOLVER</button>
+    <button class="btn btn-subtle btn-sm" onclick="initSpeak(true)" style="margin-bottom:12px">← VOLVER</button>
 
     <div class="glass-card-accent anim-slide-up">
       <div class="card-title">SPEAKING · PARTE ${t.part}</div>

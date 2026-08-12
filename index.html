@@ -169,6 +169,13 @@
           <span class="quick-icon"><img src="src/img/icons/gram.png" alt="" class="ico"></span>
           <span>Reglas</span>
         </button>
+        <!-- ESCRIBIR se llama por lo que se hace, no por cuándo se examina.
+             Estaba dentro de "Examen", y nadie que quiera redactar un correo
+             pulsa un botón que anuncia un examen a cuatro meses vista. -->
+        <button class="quick-btn" onclick="goTo('escribir')">
+          <span class="quick-icon"><img src="src/img/icons/writing.png" alt="" class="ico"></span>
+          <span>Escribir</span>
+        </button>
         <button class="quick-btn" onclick="goTo('exam')">
           <span class="quick-icon"><img src="src/img/icons/exam.png" alt="" class="ico"></span>
           <span>Examen</span>
@@ -233,6 +240,23 @@
     </div>
 
     <!-- ── EXAM ───────────────────────────────────────────── -->
+    <!-- ── ESCRIBIR ────────────────────────────────────────
+         Sección propia desde el 12-ago. Las 6 tareas de writing sólo se
+         cargaban desde dentro de SIMULACROS, y SIMULACROS salió de la barra el
+         2-ago: se quedaron sin puerta y writing_submissions llevaba a cero
+         desde julio sin que nada lo delatara. -->
+    <div class="sec" id="sec-escribir">
+      <div class="sec-title">ESCRIBIR</div>
+      <div class="glass-card-accent anim-fade-in" style="margin-bottom:14px">
+        <div class="card-title">LAS TAREAS DEL C1</div>
+        <p style="font-size:0.72rem;color:var(--text-3);margin-bottom:10px">
+          Escribes tú y te puntúas con la rúbrica oficial de Cambridge.
+        </p>
+        <div id="writing-tasks"><div class="empty-state" style="padding:8px 0"><div class="spinner"></div></div></div>
+      </div>
+      <div id="writing-editor"></div>
+    </div>
+
     <div class="sec" id="sec-exam">
       <div class="sec-title">SIMULACROS</div>
       <!-- La gramática dejó de tener pestaña propia y se entra desde aquí -->

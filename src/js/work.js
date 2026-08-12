@@ -182,12 +182,32 @@ function renderWorkPanel() {
 }
 
 // ── FRASES CLAVE ─────────────────────────────────────────
+//
+// Se practican POR TANDAS, no las doce de golpe. Las 12 situaciones llevaban
+// desde julio con cero prácticas registradas, y no era por no llegar —TRABAJO
+// está en la barra, a un toque—: era que cada situación pedía 12-13 frases con
+// micrófono y sólo contaba al terminarla entera, mientras la sesión de cinco
+// minutos daba la misma marca en HOY sin sacar el móvil del bolsillo. Puestas
+// al lado, entrar aquí era triplicar el esfuerzo por el mismo resultado.
+//
+// Cuatro frases son ~3 minutos y se retoman por donde se dejaron
+// (`situation_progress.lines_done`).
 function renderKeyPhrases() {
   const panel = document.getElementById('work-panel');
-  const keys  = _wkCurrent.keys || [];
+  const todas = _wkCurrent.keys || [];
+  const tanda = _wkCurrent.batch || 4;
+  const desde = Math.min(_wkCurrent.progress?.lines_done || 0, Math.max(0, todas.length - 1));
+  const hasta = Math.min(desde + tanda, todas.length);
+  const keys  = todas.slice(desde, hasta);
+  const ultima = hasta >= todas.length;
 
   panel.innerHTML = `
-    ${keys.map((k, i) => `
+    <div class="wk-tanda">
+      <div class="wk-tanda-barra"><div class="wk-tanda-fill" style="width:${Math.round((desde / todas.length) * 100)}%"></div></div>
+      <div class="wk-tanda-et">Frases ${desde + 1}-${hasta} de ${todas.length}${desde ? ' · sigues donde lo dejaste' : ''}</div>
+    </div>
+
+    ${keys.map((k, j) => { const i = desde + j; return `
       <div class="glass-card" style="margin-bottom:10px" id="wk-line-${i}">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
           <div style="flex:1">
@@ -203,12 +223,54 @@ function renderKeyPhrases() {
         ${k.note ? `<div style="font-size:0.68rem;color:var(--text-3);margin-top:8px;padding-top:8px;border-top:1px solid var(--surface-2)"><img src="src/img/icons/idea.png" alt="" class="ico"> ${k.note}</div>` : ''}
         <div id="wk-result-${i}" style="display:none;margin-top:8px"></div>
       </div>
-    `).join('')}
+    `; }).join('')}
 
-    <button class="btn btn-primary" onclick="finishSituation()" style="margin-top:6px">
-      MARCAR COMO PRACTICADA
+    <button class="btn btn-primary" onclick="terminarTanda(${hasta}, ${ultima})" style="margin-top:6px">
+      ${ultima ? 'TERMINAR LA SITUACIÓN' : `HECHO · QUEDAN ${todas.length - hasta}`}
     </button>
+    ${ultima ? '' : `
+      <button class="btn btn-ghost btn-sm" onclick="terminarTanda(${hasta}, true)" style="margin-top:8px;width:100%">
+        Darla por practicada entera
+      </button>`}
   `;
+}
+
+/**
+ * Cierra una tanda. `hasta` es por qué frase se sigue la próxima vez.
+ *
+ * El score sólo se manda si se ha usado el micrófono: en el servidor su
+ * presencia es lo que marca la meta de HABLAR, y marcarla sin hablar es
+ * exactamente lo que tuvo esta sección a cero durante tres semanas.
+ */
+async function terminarTanda(hasta, completa) {
+  if (!_wkCurrent) return;
+  const avg = _wkScores.length
+    ? Math.round(_wkScores.reduce((a, b) => a + b, 0) / _wkScores.length)
+    : null;
+
+  try {
+    await apiPost(`/situations/${_wkCurrent.id}/practice`, {
+      score: avg, completed: !!completa, lines_done: hasta,
+    });
+    _wkScores = [];
+
+    if (completa) {
+      toast('Situación practicada entera', 'success');
+      showXpPop(avg != null ? 10 : 4);
+      updateXpBar(_xpTotal + (avg != null ? 10 : 4));
+      return loadWorkSituations();
+    }
+
+    // Sigue en la misma situación, con la tanda siguiente ya cargada.
+    _wkCurrent.progress = { ...(_wkCurrent.progress || {}), lines_done: hasta };
+    toast(`Hecho. Quedan ${(_wkCurrent.keys || []).length - hasta}`, 'success');
+    showXpPop(4);
+    updateXpBar(_xpTotal + 4);
+    renderKeyPhrases();
+    document.getElementById('work-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) {
+    toast('No se ha podido guardar', 'error');
+  }
 }
 
 // Repetir una frase y comprobar si se ha entendido
@@ -389,7 +451,7 @@ async function finishSituation() {
 
   try {
     await apiPost(`/situations/${_wkCurrent.id}/practice`, { score: avg, completed: true });
-    await apiPut(`/daily-goals/${new Date().toISOString().split('T')[0]}`, { speaking_done: true });
+    await apiPut(`/daily-goals/${hoyLocal()}`, { speaking_done: true });
     toast('Situación practicada', 'success');
     showXpPop(10);
     updateXpBar(_xpTotal + 10);

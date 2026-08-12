@@ -6,6 +6,31 @@ const APP_NAME = 'TutorIngles';
 const TOKEN_KEY = 'ti_token';
 const API_BASE  = '';               // mismo origen que el servidor
 
+/**
+ * Qué día es HOY para quien está mirando la pantalla.
+ *
+ * `new Date().toISOString()` da la fecha en UTC, y España va una o dos horas
+ * por delante: entre medianoche y las 02:00 devuelve **el día de ayer**. Así
+ * que estudiar de madrugada apuntaba la meta al día anterior y rompía la racha
+ * sin motivo. El servidor ya lo arregló en lib/fechas.js; esto es la otra mitad,
+ * porque el cliente calculaba su propia fecha en seis sitios.
+ *
+ * 'en-CA' no es un idioma aquí, es el formato: su fecha es exactamente
+ * YYYY-MM-DD, que es lo que espera la API.
+ */
+function hoyLocal() {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date());
+  } catch {
+    // Sin Intl, al menos que use la hora local del aparato y no la de Greenwich.
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  }
+}
+
 // XP por nivel (sistema idéntico al de OkiroSport)
 const XP_LEVELS = [
   { rank: 'D', label: 'Beginner',     xp: 0    },
@@ -153,7 +178,7 @@ const NAV_COUNT    = NAV_SECTIONS.length;
 // Todas las secciones a las que se puede ir. Estas no tienen pestaña propia:
 // 'gram' y 'exam' se entran desde HOY, y 'progreso' y 'ajustes' desde la
 // cabecera.
-const SECTIONS = [...NAV_SECTIONS, 'gram', 'exam', 'progreso', 'ajustes'];
+const SECTIONS = [...NAV_SECTIONS, 'gram', 'exam', 'escribir', 'progreso', 'ajustes'];
 
 // Secciones que son "hijas" de una pestaña: mientras estás dentro, la pestaña
 // madre se queda marcada para no perder de vista dónde estás. Gramática y
@@ -198,7 +223,7 @@ function goTo(sec) {
   colocarLente();
 
   // Disparar render de sección si existe
-  const renders = { work: renderWork, vocab: renderVocab, speak: renderSpeak, pron: renderPron, gram: renderGrammar, exam: renderExam, progreso: renderProgress, ajustes: renderSettings };
+  const renders = { work: renderWork, vocab: renderVocab, speak: renderSpeak, pron: renderPron, gram: renderGrammar, exam: renderExam, escribir: renderEscribir, progreso: renderProgress, ajustes: renderSettings };
   if (renders[sec]) renders[sec]();
 }
 
@@ -498,7 +523,7 @@ function setupOfflineIndicator() {
 
 // ── HOY: cargar metas del día ──────────────────────────
 async function loadHoyData() {
-  const today = new Date().toISOString().split('T')[0];
+  const today = hoyLocal();
 
   // Actualizar fecha en header
   const opts = { weekday: 'long', day: 'numeric', month: 'long' };
@@ -623,6 +648,9 @@ function renderPron()     { if (typeof initPron     === 'function') initPron(); 
 function renderGrammar()  { if (typeof initGrammar  === 'function') initGrammar();  }
 function renderExam()     { if (typeof initExam     === 'function') initExam();     }
 function renderProgress() { if (typeof initProgress === 'function') initProgress(); }
+// ESCRIBIR no tiene módulo propio: vive en writing.js, que hasta el 12-ago sólo
+// se cargaba desde dentro de SIMULACROS.
+function renderEscribir() { if (typeof loadWritingTasks === 'function') loadWritingTasks(); }
 function renderSettings() {
   if (typeof initSettings === 'function') initSettings();
   pintarVersion();   // se refresca al entrar, para leer el último gesto hecho

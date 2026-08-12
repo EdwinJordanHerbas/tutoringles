@@ -994,11 +994,17 @@ app.get('/situations/:id', async (req, res) => {
 
     await conFigurada(lines, 'en');
 
+    // Cuántas frases entran en una tanda. Va en config para poder moverlo sin
+    // desplegar: doce frases seguidas con micrófono era lo que hacía que nadie
+    // entrase aquí.
+    const { rows: cfg } = await db("SELECT value FROM config WHERE key='situation_batch'");
+
     res.json({
       ...sit[0],
       keys:     lines.filter((l) => l.kind === 'key'),
       dialogue: lines.filter((l) => l.kind !== 'key'),
-      progress: prog[0] || null
+      progress: prog[0] || null,
+      batch:    parseInt(cfg[0]?.value, 10) || 4,
     });
   } catch (e) { fallo(res, e); }
 });
@@ -1006,26 +1012,43 @@ app.get('/situations/:id', async (req, res) => {
 // Registrar que has practicado una situación.
 app.post('/situations/:id/practice', async (req, res) => {
   const { score, completed } = req.body || {};
+  // Cuántas frases se han dicho en esta tanda, y por cuál se sigue después.
+  const hechas = Math.max(0, parseInt(req.body?.lines_done, 10) || 0);
   try {
     const { rows } = await db(
-      `INSERT INTO situation_progress (profile_id, situation_id, practiced_count, best_score, completed, last_practiced_at)
-       VALUES ($1, $2, 1, $3, $4, NOW())
+      `INSERT INTO situation_progress (profile_id, situation_id, practiced_count, best_score, completed, lines_done, last_practiced_at)
+       VALUES ($1, $2, 1, $3, $4, $5, NOW())
        ON CONFLICT (profile_id, situation_id) DO UPDATE SET
          practiced_count   = situation_progress.practiced_count + 1,
          best_score        = GREATEST(COALESCE(situation_progress.best_score, 0), COALESCE($3, 0)),
          completed         = situation_progress.completed OR $4,
+         -- Al completar vuelve a cero: la siguiente vuelta empieza de nuevo.
+         lines_done        = CASE WHEN $4 THEN 0 ELSE GREATEST(situation_progress.lines_done, $5) END,
          last_practiced_at = NOW()
        RETURNING *`,
-      [PROFILE_ID, req.params.id, score ?? null, completed ?? false]
+      [PROFILE_ID, req.params.id, score ?? null, completed ?? false, hechas]
     );
 
-    // Cuenta como práctica de speaking del día
-    await db(
-      `INSERT INTO study_sessions (profile_id, date, type, duration_minutes, score, notes)
-       VALUES ($1, $2, 'speaking', 5, $3, 'Situación del carril diario')`,
-      [PROFILE_ID, todayStr(), score ?? null]
-    );
-    await addXp(10);
+    // Sólo cuenta como speaking si de verdad ha hablado. `score` viene del
+    // reconocimiento de voz, así que su presencia ES la prueba de que el
+    // micrófono se usó: sin él esto sería otra vía de marcar HABLAR sin hablar,
+    // que es justo lo que dejó la sección a cero durante tres semanas.
+    const hubloMicro = score !== null && score !== undefined;
+    if (hubloMicro) {
+      await db(
+        `INSERT INTO study_sessions (profile_id, date, type, duration_minutes, score, notes)
+         VALUES ($1, $2, 'speaking', 5, $3, 'Situación del carril diario')`,
+        [PROFILE_ID, todayStr(), score]
+      );
+      await db(
+        `INSERT INTO daily_goals (profile_id, date, speaking_done)
+         VALUES ($1, $2, TRUE)
+         ON CONFLICT (profile_id, date) DO UPDATE SET speaking_done = TRUE`,
+        [PROFILE_ID, todayStr()]
+      );
+      await recomputeStreak(todayStr());
+    }
+    await addXp(hubloMicro ? 10 : 4);
 
     res.json(rows[0]);
   } catch (e) { fallo(res, e); }
@@ -1301,14 +1324,35 @@ app.get('/sesion-diaria', async (req, res) => {
     );
     await conFigurada(palabras, 'word');
 
-    // 2. Una frase de la primera situación sin terminar. Se elige la frase por
-    //    el día del mes para que no salga siempre la misma al empezar.
+    // 2. Una frase de la situación que toca HOY según el plan de 30 días.
+    //
+    // Antes cogía la primera sin terminar y el currículo se ignoraba entero:
+    // había un guion escrito que asignaba situación y gramática a cada día, y
+    // la sesión servía otra cosa. Si el día del plan no tiene situación
+    // asignada —o el plan ya se acabó— se cae a la primera sin terminar, que es
+    // el comportamiento de siempre.
     const { rows: sit } = await db(
-      `SELECT s.id, s.title_es, s.title_en
-         FROM situations s
-         LEFT JOIN situation_progress p ON p.situation_id = s.id AND p.profile_id = $1
-        WHERE COALESCE(p.completed, FALSE) = FALSE
-        ORDER BY s.order_index LIMIT 1`, [PROFILE_ID]
+      `WITH dia AS (
+         SELECT (CURRENT_DATE - (SELECT value::date FROM config WHERE key='plan_start_date')) + 1 AS n
+       ),
+       del_plan AS (
+         SELECT s.id, s.title_es, s.title_en, 0 AS prioridad
+           FROM curriculum c
+           JOIN situations s ON s.id = c.situation_id
+           LEFT JOIN situation_progress p ON p.situation_id = s.id AND p.profile_id = $1
+          WHERE c.day = (SELECT n FROM dia)
+            AND COALESCE(p.completed, FALSE) = FALSE
+       ),
+       siguiente AS (
+         SELECT s.id, s.title_es, s.title_en, 1 AS prioridad
+           FROM situations s
+           LEFT JOIN situation_progress p ON p.situation_id = s.id AND p.profile_id = $1
+          WHERE COALESCE(p.completed, FALSE) = FALSE
+          ORDER BY s.order_index LIMIT 1
+       )
+       SELECT id, title_es, title_en FROM (
+         SELECT * FROM del_plan UNION ALL SELECT * FROM siguiente
+       ) t ORDER BY prioridad LIMIT 1`, [PROFILE_ID]
     );
     let frase = null;
     if (sit.length) {
@@ -1355,16 +1399,37 @@ app.post('/sesion-diaria/fin', async (req, res) => {
   const aciertos = Math.max(0, parseInt(req.body?.aciertos, 10) || 0);
   const frase    = req.body?.frase_hecha === true;
   try {
+    // OJO: la sesión NO marca `speaking_done`, y quitarlo fue el arreglo más
+    // importante de esta pantalla. Antes ver UNA frase del sector —leerla, sin
+    // micrófono— dejaba la meta de HABLAR en "Completado ✓" y la barra del día
+    // al 66 %. Los cuatro días de uso tenían speaking_done=true con la tabla
+    // `speaking_practice` vacía: la app llevaba tres semanas diciendo que ya
+    // habías hablado, así que nunca había motivo para entrar en HABLAR.
+    //
     // El índice único es (profile_id, date): nombrarlo entero, como manda la
     // migración 07. Con solo (date) esto reventaría.
     await db(
-      `INSERT INTO daily_goals (profile_id, date, vocab_done, speaking_done)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO daily_goals (profile_id, date, vocab_done)
+       VALUES ($1, $2, $3)
        ON CONFLICT (profile_id, date) DO UPDATE SET
-         vocab_done    = GREATEST(daily_goals.vocab_done, EXCLUDED.vocab_done),
-         speaking_done = daily_goals.speaking_done OR EXCLUDED.speaking_done`,
-      [PROFILE_ID, todayStr(), aciertos, frase]
+         vocab_done = GREATEST(daily_goals.vocab_done, EXCLUDED.vocab_done)`,
+      [PROFILE_ID, todayStr(), aciertos]
     );
+
+    // La frase del sector sí cuenta como lo que es: una frase de esa situación.
+    // Así el trabajo que la sesión SÍ hace deja rastro donde corresponde, en
+    // vez de anotarse en una meta que no ha tocado.
+    const sitId = parseInt(req.body?.situation_id, 10);
+    if (frase && Number.isFinite(sitId)) {
+      await db(
+        `INSERT INTO situation_progress (profile_id, situation_id, practiced_count, lines_done, last_practiced_at)
+         VALUES ($1, $2, 0, 1, NOW())
+         ON CONFLICT (profile_id, situation_id) DO UPDATE SET
+           lines_done        = situation_progress.lines_done + 1,
+           last_practiced_at = NOW()`,
+        [PROFILE_ID, sitId]
+      );
+    }
     await db(
       `INSERT INTO study_sessions (profile_id, date, type, duration_minutes, notes)
        VALUES ($1,$2,'vocab',5,'Sesión diaria')`, [PROFILE_ID, todayStr()]);

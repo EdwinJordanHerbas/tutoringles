@@ -82,16 +82,21 @@ function renderExamDashboard() {
       <div id="listening-tasks"><div class="empty-state" style="padding:8px 0"><div class="spinner"></div></div></div>
     </div>
 
-    <div class="glass-card-accent anim-fade-in" style="margin-bottom:14px">
-      <div class="card-title">PRACTICAR · WRITING</div>
-      <p style="font-size:0.72rem;color:var(--text-3);margin-bottom:10px">Escribes tú y te puntúas con la rúbrica oficial de Cambridge:</p>
-      <div id="writing-tasks"><div class="empty-state" style="padding:8px 0"><div class="spinner"></div></div></div>
-    </div>
-
-    <div class="glass-card-accent anim-fade-in" style="margin-bottom:14px">
-      <div class="card-title">PRACTICAR · SPEAKING</div>
-      <p style="font-size:0.72rem;color:var(--text-3);margin-bottom:10px">Las 4 partes del oral, con cronómetro para el minuto seguido:</p>
-      <div id="speaking-tasks"><div class="empty-state" style="padding:8px 0"><div class="spinner"></div></div></div>
+    <!-- Writing y Speaking ya NO se pintan aquí. Estaban dentro de esta pantalla
+         y esta pantalla salió de la barra el 2-ago: como este fichero era lo
+         único que las cargaba, las 6 tareas escritas y las 5 del oral se
+         quedaron sin puerta y sus tablas llevaban a cero desde julio. Writing
+         tiene sección propia (ESCRIBIR) y Speaking está en HABLAR. -->
+    <div class="glass-card anim-fade-in" style="margin-bottom:14px">
+      <div class="card-title">LAS OTRAS DOS DESTREZAS</div>
+      <div class="quick-grid quick-grid-2" style="margin-top:8px">
+        <button class="quick-btn" onclick="goTo('escribir')">
+          <span class="quick-icon">${ico('writing', 22)}</span><span>Escribir</span>
+        </button>
+        <button class="quick-btn" onclick="goTo('speak')">
+          <span class="quick-icon">${ico('mic', 22)}</span><span>Hablar</span>
+        </button>
+      </div>
     </div>
 
     <div class="glass-card anim-fade-in" style="margin-bottom:14px">
@@ -153,8 +158,6 @@ function renderExamDashboard() {
   // Las tareas se cargan aparte, sin bloquear el pintado del panel.
   loadReadingTasks();
   if (typeof loadListeningTasks === 'function') loadListeningTasks();
-  if (typeof loadWritingTasks   === 'function') loadWritingTasks();
-  if (typeof loadSpeakingTasks  === 'function') loadSpeakingTasks();
 }
 
 // ══════════════════════ READING (partes 5-8) ══════════════════════

@@ -106,7 +106,7 @@ async function markTopicDone(topicId, completed) {
     if (completed) {
       showXpPop(20);
       // Marcar meta grammar del día
-      const today = new Date().toISOString().split('T')[0];
+      const today = hoyLocal();
       await apiPut(`/daily-goals/${today}`, { grammar_done: true });
       await apiPost('/study-sessions', { type: 'grammar', score: 100 });
     }

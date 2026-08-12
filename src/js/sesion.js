@@ -208,6 +208,10 @@ async function cerrarConResultado(silencioso) {
     const r = await apiPost('/sesion-diaria/fin', {
       aciertos: _sesAciertos,
       frase_hecha: _sesFrase,
+      // Para que la frase cuente en SU situación. Antes la sesión marcaba la
+      // meta de HABLAR y no dejaba rastro en la situación de la que salía la
+      // frase, así que TRABAJO parecía intacto mientras se avanzaba por él.
+      situation_id: _sesData?.frase?.situacion?.id ?? null,
     });
     _sesData.racha = r?.racha;
   } catch { /* el resultado en pantalla ya está: no se molesta al usuario */ }

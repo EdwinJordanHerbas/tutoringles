@@ -88,7 +88,7 @@ function renderFlashCard() {
     // Guardar sesión
     apiPost('/study-sessions', { type: 'vocab', score: pct }).catch(() => {});
     // Actualizar meta diaria
-    apiPut(`/daily-goals/${new Date().toISOString().split('T')[0]}`, { vocab_done: _sessionCorrect }).catch(() => {});
+    apiPut(`/daily-goals/${hoyLocal()}`, { vocab_done: _sessionCorrect }).catch(() => {});
     updateXpBar(_xpTotal + _sessionCorrect * 5);
     return;
   }
