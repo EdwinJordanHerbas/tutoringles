@@ -30,6 +30,7 @@ const PRECACHE = [
   '/src/js/exam.js',
   '/src/js/listening.js',
   '/src/js/writing.js',
+  '/src/js/diagnostico.js',
   '/src/js/progress.js',
   '/src/js/settings.js'
 ];
@@ -38,7 +39,7 @@ const PRECACHE = [
 const API_PREFIXES = [
   '/words', '/user-words', '/grammar-topics', '/grammar-progress',
   '/study-sessions', '/daily-goals', '/speaking-practice',
-  '/exam-attempts', '/exam-questions', '/exam-quiz', '/curriculum',
+  '/exam-attempts', '/exam-questions', '/exam-quiz', '/curriculum', '/diagnostico',
   '/plan', '/stats', '/config', '/auth', '/health', '/pronunciation',
   '/sesion-diaria', '/push', '/situations', '/tracks', '/profile', '/reading', '/listening', '/writing', '/speaking'
 ];
