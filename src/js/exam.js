@@ -374,6 +374,52 @@ function getExamTips(section) {
 // ══════════════════════ QUIZ INTERACTIVO ══════════════════════
 const _esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+/**
+ * Del `prompt` crudo de exam_questions a las piezas que se pintan.
+ *
+ * El banco guarda la transformación entera en una sola cadena:
+ *   "It's possible that she forgot." || She ____ about it. [HAVE]
+ * y la palabra que hay que escribir es sólo el trozo del hueco ("may have
+ * forgotten"), porque la corrección compara la cadena exacta.
+ *
+ * Vive aquí y no dentro de quizQuestionHtml porque el test de nivel pinta las
+ * mismas preguntas: cuando lo pintaba por su cuenta salían con el `||` y el
+ * `[HAVE]` a la vista y sin decir cuánto había que escribir, y quien contestaba
+ * la frase entera fallaba aunque se la supiera. Un cuarto de las preguntas del
+ * diagnóstico son de este tipo: era medir el formato de la pantalla, no el
+ * inglés de quien la usa.
+ */
+function uoePartes(q) {
+  const prompt = String(q?.prompt ?? '');
+
+  if (q?.part === 'key_word_transformation') {
+    const [orig, rest = ''] = prompt.split('||');
+    const keyMatch = rest.match(/\[([^\]]+)\]/);
+    return {
+      intro: orig.replace(/\|\|/g, '').trim(),
+      frase: rest.replace(/\[[^\]]+\]/, '').trim(),
+      clave: keyMatch ? keyMatch[1] : (q.given_word || ''),
+      etiqueta: 'Palabra clave (no la cambies)',
+      ayuda: 'escribe sólo las 3-6 palabras que faltan',
+    };
+  }
+
+  if (q?.part === 'word_formation') {
+    return {
+      intro: '', frase: prompt, clave: q.given_word || '',
+      etiqueta: 'Base', ayuda: 'transforma la palabra dada',
+    };
+  }
+
+  return {
+    intro: '', frase: prompt, clave: '', etiqueta: '',
+    ayuda: q?.part === 'open_cloze' ? 'una sola palabra' : '',
+  };
+}
+
+// Resalta el hueco. Recibe texto YA escapado, porque mete HTML.
+const uoeHueco = (html) => String(html ?? '').replace('____', '<span class="quiz-gap">____</span>');
+
 async function startQuiz(part) {
   const container = document.getElementById('exam-content');
   container.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
@@ -395,10 +441,11 @@ function quizQuestionHtml(q, i) {
   const meta = UOE_PARTS.find((p) => p.id === q.part) || {};
   let body = '';
 
+  const p = uoePartes(q);
+
   if (q.part === 'mc_cloze') {
-    const prompt = _esc(q.prompt).replace('____', '<span class="quiz-gap">____</span>');
     const opts = Array.isArray(q.options) ? q.options : [];
-    body = `<p class="quiz-prompt">${prompt}</p>
+    body = `<p class="quiz-prompt">${uoeHueco(_esc(p.frase))}</p>
       <div class="quiz-options">
         ${opts.map((o) => `
           <label class="quiz-opt">
@@ -406,20 +453,14 @@ function quizQuestionHtml(q, i) {
           </label>`).join('')}
       </div>`;
   } else if (q.part === 'key_word_transformation') {
-    // Formato: "original" || segunda con ____ [KEY]
-    const [orig, rest = ''] = q.prompt.split('||');
-    const keyMatch = rest.match(/\[([^\]]+)\]/);
-    const key = keyMatch ? keyMatch[1] : (q.given_word || '');
-    const second = _esc(rest.replace(/\[[^\]]+\]/, '').trim()).replace('____', '<span class="quiz-gap">____</span>');
-    body = `<p class="quiz-prompt" style="color:var(--text-3)">${_esc(orig.replace(/\|\|/g, '').trim())}</p>
-      <p class="quiz-prompt">${second}</p>
-      <div class="quiz-hint">Palabra clave (no la cambies): <strong>${_esc(key)}</strong> · usa 3-6 palabras</div>
+    body = `<p class="quiz-prompt" style="color:var(--text-3)">${_esc(p.intro)}</p>
+      <p class="quiz-prompt">${uoeHueco(_esc(p.frase))}</p>
+      <div class="quiz-hint">${p.etiqueta}: <strong>${_esc(p.clave)}</strong> · ${p.ayuda}</div>
       <input class="field-input quiz-input" type="text" data-qid="${q.id}" placeholder="las palabras que faltan" autocapitalize="none" autocomplete="off">`;
   } else {
     // open_cloze y word_formation
-    const prompt = _esc(q.prompt).replace('____', '<span class="quiz-gap">____</span>');
-    body = `<p class="quiz-prompt">${prompt}</p>
-      ${q.given_word ? `<div class="quiz-hint">Base: <strong>${_esc(q.given_word)}</strong></div>` : ''}
+    body = `<p class="quiz-prompt">${uoeHueco(_esc(p.frase))}</p>
+      ${p.clave ? `<div class="quiz-hint">${p.etiqueta}: <strong>${_esc(p.clave)}</strong> · ${p.ayuda}</div>` : ''}
       <input class="field-input quiz-input" type="text" data-qid="${q.id}" placeholder="tu respuesta" autocapitalize="none" autocomplete="off">`;
   }
 

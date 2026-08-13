@@ -1135,12 +1135,24 @@
   color: var(--text-3);
   margin-bottom: 6px;
 }
+/* La frase original de una transformación: se lee, no se contesta, así que va
+   en gris y entrecomillada para que no se confunda con la que lleva el hueco. */
+.diag-intro {
+  font-size: 0.82rem;
+  color: var(--text-3);
+  line-height: 1.5;
+  margin-bottom: 6px;
+}
 .diag-prompt {
   font-size: 0.88rem;
   color: var(--text);
   line-height: 1.5;
   margin-bottom: 10px;
 }
+/* El hueco que hay que rellenar, en el test de nivel y en la práctica de Use of
+   English. La clase la ponía ya quizQuestionHtml, pero no la estilaba nadie:
+   estaba en el HTML sin ningún efecto y el ____ se perdía dentro de la frase. */
+.quiz-gap { color: var(--accent); font-weight: 700; }
 .diag-dada {
   font-size: 0.72rem;
   color: var(--text-2);

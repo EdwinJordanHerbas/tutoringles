@@ -70,12 +70,15 @@ function diasHastaExamen(fecha) {
 }
 
 const escaparDg = (s) => String(s ?? '')
-  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 // ── EL TEST ──────────────────────────────────────────────
 
 async function abrirDiagnostico() {
-  goTo('exam');
+  // Sin `render: false`, goTo lanza initExam() y los dos escriben en
+  // #exam-content: gana el que conteste más tarde, y el test se lo puede comer
+  // el panel de simulacros.
+  goTo('exam', { render: false });
   const c = document.getElementById('exam-content');
   if (!c) return;
   c.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
@@ -114,23 +117,31 @@ function renderDiagnostico() {
     </div>
 
     <div id="diag-preguntas">
-      ${_dgPreguntas.map((q, i) => `
+      ${_dgPreguntas.map((q, i) => {
+        // Mismo despiece que la práctica de Use of English (uoePartes, en
+        // exam.js). Pintar `q.prompt` en crudo dejaba a la vista el `||` y el
+        // `[HAVE]` de las transformaciones y no decía que sólo hay que escribir
+        // el trozo del hueco: seis de las veinticuatro preguntas eran casi
+        // imposibles de acertar por formato, no por nivel.
+        const p = uoePartes(q);
+        return `
         <div class="glass-card" style="margin-bottom:10px">
           <div class="diag-num">${i + 1} de ${_dgPreguntas.length} · ${NOMBRES[q.part] || q.part}</div>
-          <div class="diag-prompt">${escaparDg(q.prompt)}</div>
-          ${q.given_word ? `<div class="diag-dada">palabra dada: <b>${escaparDg(q.given_word)}</b></div>` : ''}
+          ${p.intro ? `<div class="diag-intro">${escaparDg(p.intro)}</div>` : ''}
+          <div class="diag-prompt">${uoeHueco(escaparDg(p.frase))}</div>
+          ${p.clave ? `<div class="diag-dada">${p.etiqueta}: <b>${escaparDg(p.clave)}</b> · ${p.ayuda}</div>` : ''}
           ${Array.isArray(q.options) && q.options.length
             ? `<div class="diag-ops">
-                 ${q.options.map((op) => `
-                   <button class="diag-op" id="diag-${q.id}-${escaparDg(op)}"
-                           onclick="responderDiag(${q.id}, ${JSON.stringify(op).replace(/"/g, '&quot;')})">
+                 ${q.options.map((op, j) => `
+                   <button class="diag-op" id="diag-${q.id}-${j}" onclick="elegirDiag(${q.id}, ${j})">
                      ${escaparDg(op)}
                    </button>`).join('')}
                </div>`
             : `<input class="diag-input" type="text" autocomplete="off" autocapitalize="off"
-                      placeholder="Escribe tu respuesta"
+                      placeholder="${p.ayuda ? escaparDg(p.ayuda) : 'Escribe tu respuesta'}"
                       oninput="responderDiag(${q.id}, this.value)">`}
-        </div>`).join('')}
+        </div>`;
+      }).join('')}
     </div>
 
     <button class="btn btn-primary" onclick="corregirDiagnostico()" style="width:100%;margin-top:6px">
@@ -141,12 +152,21 @@ function renderDiagnostico() {
 
 function responderDiag(id, valor) {
   _dgRespuestas[id] = valor;
-  // En las de opciones, marcar la elegida.
+}
+
+/**
+ * Las de opciones se marcan por POSICIÓN, no por el texto de la opción: el id
+ * del botón se escapaba al pintarlo y no al buscarlo, así que cualquier opción
+ * con un carácter especial habría dejado de marcarse sin dar error.
+ */
+function elegirDiag(id, idx) {
   const q = _dgPreguntas.find((x) => x.id === id);
-  if (!Array.isArray(q?.options)) return;
-  for (const op of q.options) {
-    document.getElementById(`diag-${id}-${op}`)?.classList.toggle('elegida', op === valor);
-  }
+  const ops = Array.isArray(q?.options) ? q.options : [];
+  if (!ops[idx]) return;
+  _dgRespuestas[id] = ops[idx];
+  ops.forEach((_, j) => {
+    document.getElementById(`diag-${id}-${j}`)?.classList.toggle('elegida', j === idx);
+  });
 }
 
 async function corregirDiagnostico() {

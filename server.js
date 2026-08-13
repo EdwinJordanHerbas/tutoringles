@@ -907,16 +907,32 @@ app.post('/diagnostico', async (req, res) => {
       if (d.correct) porParte[d.part].aciertos++;
     }
 
-    await db(`INSERT INTO config (key, value) VALUES ('nivel_medido', $1)
-              ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [nivel]);
-    await db(`INSERT INTO config (key, value) VALUES ('nivel_medido_pct', $1)
-              ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [String(pct)]);
-    await db(`INSERT INTO config (key, value) VALUES ('nivel_medido_fecha', $1)
-              ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [todayStr()]);
-    await db(
-      `INSERT INTO exam_attempts (profile_id, date, section, score, max_score, notes)
-       VALUES ($1, $2, 'diag', $3, 100, $4)`,
-      [PROFILE_ID, todayStr(), pct, `Diagnóstico inicial · ${aciertos}/${detail.length} · ${nivel}`]);
+    // Las cuatro escrituras van en UNA transacción, y el orden importa: primero
+    // el intento —que es el dato de verdad, y lo que puede rechazar la base— y
+    // después el resumen en config. Sueltas, el 12-ago fallaba la última y las
+    // tres primeras quedaban escritas: `nivel_medido` con un porcentaje que
+    // nadie había llegado a ver, y la tarjeta de HOY convencida de que el test
+    // estaba hecho. Una medición a medias miente peor que ninguna medición.
+    const cli = await pool.connect();
+    try {
+      await cli.query('BEGIN');
+      await cli.query(
+        `INSERT INTO exam_attempts (profile_id, date, section, score, max_score, notes)
+         VALUES ($1, $2, 'diag', $3, 100, $4)`,
+        [PROFILE_ID, todayStr(), pct, `Diagnóstico inicial · ${aciertos}/${detail.length} · ${nivel}`]);
+      await cli.query(`INSERT INTO config (key, value) VALUES ('nivel_medido', $1)
+                       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [nivel]);
+      await cli.query(`INSERT INTO config (key, value) VALUES ('nivel_medido_pct', $1)
+                       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [String(pct)]);
+      await cli.query(`INSERT INTO config (key, value) VALUES ('nivel_medido_fecha', $1)
+                       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [todayStr()]);
+      await cli.query('COMMIT');
+    } catch (e) {
+      await cli.query('ROLLBACK').catch(() => {});
+      throw e;
+    } finally {
+      cli.release();
+    }
     await addXp(30);
 
     res.json({ total: detail.length, aciertos, pct, nivel, texto, porParte, detail });

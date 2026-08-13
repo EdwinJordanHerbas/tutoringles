@@ -185,7 +185,14 @@ const SECTIONS = [...NAV_SECTIONS, 'gram', 'exam', 'escribir', 'progreso', 'ajus
 // Examen ya no cuelgan de ninguna: son destinos sueltos y la barra se apaga.
 const PESTANA_MADRE = {};
 
-function goTo(sec) {
+/**
+ * `render: false` entra en la sección pero NO dispara su carga automática. Lo
+ * usa el test de nivel, que se pinta en el contenedor de EXAMEN pero con
+ * contenido propio: con la carga automática, initExam() y el diagnóstico
+ * escribían los dos en #exam-content a la vez y ganaba el que respondiera más
+ * tarde, así que abrir el test podía acabar enseñando el panel de simulacros.
+ */
+function goTo(sec, opts = {}) {
   if (!SECTIONS.includes(sec)) return;
   const anterior = _activeSection;
   _activeSection = sec;
@@ -223,6 +230,7 @@ function goTo(sec) {
   colocarLente();
 
   // Disparar render de sección si existe
+  if (opts.render === false) return;
   const renders = { work: renderWork, vocab: renderVocab, speak: renderSpeak, pron: renderPron, gram: renderGrammar, exam: renderExam, escribir: renderEscribir, progreso: renderProgress, ajustes: renderSettings };
   if (renders[sec]) renders[sec]();
 }
