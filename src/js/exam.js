@@ -57,6 +57,7 @@ function renderExamDashboard() {
   });
 
   container.innerHTML = `
+    ${typeof _idioma !== 'undefined' && _idioma === 'fr' ? examTarjetaDalf() : ''}
     <div class="glass-card-accent anim-fade-in" style="margin-bottom:14px">
       <div class="card-title">PRACTICAR · USE OF ENGLISH</div>
       <p style="font-size:0.72rem;color:var(--text-3);margin-bottom:10px">Test interactivo con corrección automática. Elige una parte:</p>
@@ -550,4 +551,25 @@ async function saveExamResult() {
   } catch (e) {
     toastError(e);
   }
+}
+
+/**
+ * Con el francés activo, SIMULACROS empieza por el DALF: qué es y en qué fase
+ * del plan entra. Los simulacros de debajo siguen siendo del Cambridge, y se
+ * dice, para que nadie crea que está haciendo un examen de francés.
+ */
+function examTarjetaDalf() {
+  return `
+    <div class="glass-card anim-fade-in" style="margin-bottom:14px">
+      <div class="card-title">DALF C1 · EL EXAMEN DE FRANCÉS</div>
+      <div style="font-size:0.78rem;color:var(--text-2);line-height:1.6">
+        Cuatro pruebas: comprensión oral, comprensión escrita, <b>producción
+        escrita</b> (una síntesis de documentos y un ensayo argumentado) y
+        <b>producción oral</b> (un exposé a partir de documentos y un debate con
+        el tribunal). Se aprueba con 50 de 100 y un mínimo en cada prueba.<br><br>
+        Es la fase 3 del plan del francés. Los simulacros del DALF todavía no
+        están en la app: lo de abajo es el <b>Cambridge (inglés)</b>.
+      </div>
+      <button class="btn btn-subtle btn-sm" onclick="cambiarIdioma()" style="margin-top:10px">PASAR A INGLÉS</button>
+    </div>`;
 }

@@ -95,7 +95,7 @@ function tramoPalabra() {
     ? pronLeyenda(w.pron.leyenda, 'ley-ses-pal') : '';
 
   return `
-    <div class="ses-et">PALABRA ${_sesPaso + 1} DE ${_sesData.palabras.length}</div>
+    <div class="ses-et">PALABRA ${_sesPaso + 1} DE ${_sesData.palabras.length}${w.repetida ? ' · LA FALLASTE ANTES' : ''}</div>
     <div class="ses-palabra">${escaparHtml(w.word)}</div>
     ${fig}
     ${ley}
@@ -214,6 +214,8 @@ async function cerrarConResultado(silencioso) {
       situation_id: _sesData?.frase?.situacion?.id ?? null,
     });
     _sesData.racha = r?.racha;
+    // En el modo Tetris cada sesión es una ronda: el final dice cuál era.
+    _sesData.rondas = r?.rondas;
   } catch { /* el resultado en pantalla ya está: no se molesta al usuario */ }
 
   const xp = _sesAciertos * 5 + (_sesFrase ? 10 : 0);
@@ -227,12 +229,34 @@ async function cerrarConResultado(silencioso) {
 function tramoFin() {
   const racha = _sesData?.racha;
   const quedan = Math.max(0, (_sesData?.pendientes_totales || 0) - _sesAciertos);
+  const frances = _sesData?.idioma === 'fr';
+  // Con el modo Tetris la sesión no es "lo de hoy": es una ronda de varias, y
+  // el final lo dice y ofrece la siguiente. El botón de otra ronda no obliga a
+  // nada, pero quitar el paso de volver a HOY y buscarla es lo que hace que se
+  // encadenen dos rondas en vez de una.
+  const tetris = typeof _tetrisActivo !== 'undefined' && _tetrisActivo && _sesData?.rondas;
+  const meta   = (typeof _tt !== 'undefined' && _tt?.meta_rondas) || 6;
+  if (tetris) {
+    return `
+    <div class="ses-fin">
+      <div class="ses-fin-ico"><img src="src/img/icons/done.png" alt="" class="ico"></div>
+      <div class="ses-fin-tit">Ronda ${_sesData.rondas} ${_sesData.rondas <= meta ? `de ${meta}` : 'extra'}</div>
+      <div class="ses-fin-sub">
+        ${_sesAciertos} ${_sesAciertos === 1 ? 'palabra' : 'palabras'}${_sesFrase ? ' y una frase' : ''}.
+        Lo que has fallado vuelve en la siguiente.
+      </div>
+      <div class="tt-puntos tt-puntos-fin">${Array.from({ length: Math.max(meta, _sesData.rondas) }, (_, i) =>
+        `<span class="tt-punto${i < _sesData.rondas ? ' on' : ''}"></span>`).join('')}</div>
+      <button class="btn btn-primary" onclick="empezarSesion()" style="width:100%;margin-top:14px">OTRA RONDA</button>
+      <button class="btn btn-subtle" onclick="cerrarSesion()" style="width:100%;margin-top:8px">CERRAR</button>
+    </div>`;
+  }
   return `
     <div class="ses-fin">
       <div class="ses-fin-ico"><img src="src/img/icons/done.png" alt="" class="ico"></div>
       <div class="ses-fin-tit">Hecho por hoy</div>
       <div class="ses-fin-sub">
-        ${_sesAciertos} ${_sesAciertos === 1 ? 'palabra' : 'palabras'}${_sesFrase ? ' y una frase de mostrador' : ''}.
+        ${_sesAciertos} ${_sesAciertos === 1 ? 'palabra' : 'palabras'}${_sesFrase ? (frances ? ' y una frase para Suiza' : ' y una frase de mostrador') : ''}.
       </div>
       ${racha ? `<div class="ses-fin-racha"><img src="src/img/icons/streak.png" alt="" class="ico"> Racha de ${racha} ${racha === 1 ? 'día' : 'días'}</div>` : ''}
       <div class="ses-fin-pie">
@@ -243,9 +267,16 @@ function tramoFin() {
 }
 
 // Si se entra desde la notificación (/?sesion=1), la sesión se abre sola.
+//
+// El parámetro se quita al abrir, no antes: si el service worker nuevo recarga
+// la página en medio (pasa en la primera visita tras cada despliegue), la
+// recarga tiene que seguir llevando el ?sesion=1 o el aviso no abre nada.
 function autoAbrirSesion() {
   const params = new URLSearchParams(location.search);
   if (params.get('sesion') !== '1') return;
-  history.replaceState(null, '', location.pathname);
-  setTimeout(() => { goTo('hoy'); empezarSesion(); }, 600);
+  setTimeout(() => {
+    history.replaceState(null, '', location.pathname);
+    goTo('hoy');
+    empezarSesion();
+  }, 600);
 }

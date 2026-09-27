@@ -1,7 +1,12 @@
 # TutorIngles
 
-App para aprender inglés enfocada al día a día por sector (empieza por **dependiente**, que es
-el trabajo de Edwin en Sprinter) y de ahí hacia el **C1 de Cambridge**.
+App para aprender **inglés y francés** enfocada al día a día por sector (empieza por
+**dependiente**, que es el trabajo de Edwin en Sprinter) y de ahí hacia el **C1** de cada idioma:
+**Cambridge C1 Advanced** y **DALF C1**.
+
+**Desde el 27-sep-2026 el francés va primero**: Edwin se va a trabajar a un cantón francófono de
+Suiza en torno a un mes. Francés A2 (entiende mucho, no consigue explicarse), inglés B1. Ver
+"Dos idiomas y modo Tetris" más abajo.
 
 **En producción** desde el 20-jul-2026 en `https://tutoringles.tinafusion.com`.
 
@@ -18,7 +23,7 @@ el trabajo de Edwin en Sprinter) y de ahí hacia el **C1 de Cambridge**.
 | Comando | Qué hace |
 |---|---|
 | `npm start` | `node server.js` |
-| `npm test` | `node --test` — tests nativos de Node (52, de los que 8 se saltan sin servidor) |
+| `npm test` | `node --test` — tests nativos de Node (114, de los que 12 se saltan sin servidor) |
 | `npm run test:fsrs` | tests del algoritmo de repetición espaciada |
 | `node tools/generar-lexico.js` | regenera el diccionario de pronunciación |
 
@@ -26,6 +31,76 @@ No hay build. Para arrancar en local en Windows: `iniciar-local.cmd`.
 
 **El service worker va por versión: al tocar cualquier JS hay que subir `VERSION` en `sw.js`**,
 o los usuarios se quedan con la versión cacheada.
+
+## Dos idiomas y modo Tetris (27-sep-2026)
+
+### El francés no es otra app
+
+Va en las **mismas tablas** con una columna `lang` (`words`, `tracks`, `grammar_topics`) y un
+idioma activo en `config.idioma_activo`, que se cambia con el chip EN/FR de la cabecera. Así el
+SRS, la sesión de 5 minutos, TRABAJO, PALABRAS, HABLAR y los avisos sirven para los dos sin
+duplicar nada. El idioma vive en el servidor y no en el navegador porque el aviso diario sale
+del servidor y tiene que saber de qué idioma hablar.
+
+- **Toda consulta de contenido filtra por idioma.** `idiomaActivo()` / `idiomaDe(req)` en
+  server.js (`?lang=` para forzar uno). Una consulta nueva sobre `words` sin `w.lang = …` mezcla
+  los dos idiomas: en la sesión saldrían palabras inglesas con la voz francesa.
+- **El sector va por idioma**: `sectorDe(lang)` da el del perfil si es de ese idioma y, si no, el
+  primero que haya. El francés tiene el suyo, `suisse-romande` (12 situaciones). Las columnas
+  `situations.title_en` y `situation_lines.en` se llaman así por herencia: guardan el texto **en
+  el idioma del sector**.
+- **La figurada es sólo del inglés** (`figurarSi(lang, …)`). Con una palabra francesa buscaría el
+  AFI en el diccionario inglés y, si por casualidad existe ("table"), la enseñaría a leer en inglés.
+- **El audio grabado (Emily) es sólo del inglés.** `voz.js` no consulta el índice si el idioma no
+  es inglés: el índice se busca por texto y "table" francesa habría sonado con la grabación inglesa.
+- **Voz y micrófono por idioma.** `vozDecir` lee en el idioma activo salvo que se le pida otro;
+  lo que es siempre inglés (SONIDOS inglés, listening) lo pide explícitamente. La voz preferida se
+  guarda una por idioma (`voz_preferida` y `voz_preferida_fr`). Para el francés se puntúa por
+  encima fr-CH y fr-FR, y por debajo fr-CA: en iOS Amélie es de Quebec y no es el acento de Lausana.
+- **SONIDOS en francés es otra cosa** (`src/js/sons.js`): nueve contrastes que un hispanohablante
+  no oye (u/ou, s/z, b/v, le/les, nasales…), con ronda de oído. Material didáctico, sin migración.
+- **El plan del francés va por fases, no por días** (`lib/fases.js`, `/plan/fases`): sobrevivir →
+  trabajar → DALF C1, y se pasa de fase cuando los datos lo dicen. Una palabra cuenta cuando está
+  **consolidada** (estabilidad FSRS ≥ 7 días), no por haberla acertado una vez. El plan de 30 días
+  sigue siendo del inglés.
+- **Lo que sólo existe en inglés lo dice**: SIMULACROS, ESCRIBIR y el test de nivel son del
+  Cambridge; con el francés activo el test de nivel no se pinta y las otras dos avisan arriba. El
+  nivel del francés sale "—" en la cabecera: no hay ninguna medición del DALF todavía.
+
+### El modo Tetris
+
+Petición literal: "estudiar por el día y por la noche, durmiendo, repasar los conceptos", como el
+efecto Tetris. Lo que se construyó y **lo que no se prometió**:
+
+- **De día, rondas** de la sesión de 5 minutos (`tetris_rondas`, 6). Cada `/sesion-diaria/fin` es
+  una ronda en `tetris_dias`. **Lo fallado hoy vuelve en la ronda siguiente** (hasta media ronda),
+  no mañana: con una sesión al día daba igual, con seis era tirar cinco oportunidades.
+- **Antes de dormir, repaso de almohada**: las palabras del día, del español al idioma (la
+  dirección difícil: el hueco es producir), oyendo cada una con la voz del sistema — la misma que
+  sonará de noche.
+- **Dormido, pistas (TMR)**: la mitad de las palabras del día suenan bajito, sólo la palabra
+  extranjera y **nunca la traducción** (oírla detrás anula el efecto en los estudios). Espera
+  inicial (dormirse), un tramo de 90 min (el sueño profundo es la primera parte de la noche) y
+  pausas. **Palabras nuevas durmiendo no funcionan y la app no lo intenta.**
+- **Por la mañana, test a ciegas**: la otra mitad fue el grupo de **control**, y el test compara.
+  `lib/tetris.js` dice el veredicto — también "no te funciona" y "te está despertando" — y no se
+  pronuncia hasta 7 noches. El test cuenta como repaso FSRS.
+
+Cuatro detalles que costaría redescubrir:
+
+- **El día de estudio va de 05:00 a 05:00** (`diaDeEstudio`). Quien repasa a las 00:30 sigue en su
+  día: la noche tiene que tirar de lo de esa tarde, no de un día nuevo vacío.
+- **El sorteo es estratificado y se hace una vez por noche.** Por dificultad, de dos en dos, para
+  que un grupo no se lleve todas las difíciles; y reabrir el modo noche devuelve el mismo reparto.
+- **En una web, la noche necesita la pantalla encendida**: con el móvil bloqueado, iOS congela la
+  página y no suena nada. Pantalla negra + Wake Lock (iOS 18.4+ en la app instalada; si no hay,
+  se avisa). Las pistas **sólo cuentan si la página estaba visible al sonar**, y una noche con
+  menos de 20 no entra en la comparación: contarla falsearía el dato que decide si esto sirve.
+- **El test del despertar no recibe `con_pista`** (hay test de API): saber qué sonó cambia cómo
+  se juzga uno mismo.
+
+Avisos nuevos: `despertar` (08:00) y `almohada` (22:30), cada uno con su candado en `push_log`
+(tipo distinto) y su `tag`, para que no se tapen entre ellos ni con el diario.
 
 ## Que la app se abra
 
@@ -413,7 +488,9 @@ acumulativas idempotentes**, que se aplican a mano y en orden:
 `_10` FSRS → `_11` reading → `_12` iconos → `_13` writing y speaking → `_14` listening →
 `_15` iconos por sector → `_16` pronunciación → `_17` AFI por par mínimo → `_18` avisos y sesión →
 `_19` correcciones de los pares (la h, r/l, e-fantasma, AFI y orden) → `_20` qué pares tienen
-audio fiable → `_21` situaciones por tandas.
+audio fiable → `_21` situaciones por tandas → `_22`/`_23` test de nivel → `_24` idiomas y modo
+Tetris → `_25` vocabulario de francés (217, **el orden de las filas es el orden de estudio**) →
+`_26` situaciones de la Suiza romanda → `_27` gramática de francés → `_28` más inglés C1 (116).
 
 **Ojo: las tablas son de `postgres`, no del usuario `tutoringles`.** Cualquier migración con
 `ALTER TABLE` hay que aplicarla con `-U postgres` o responde `must be owner of table`. La

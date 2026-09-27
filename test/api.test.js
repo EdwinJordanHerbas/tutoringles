@@ -102,3 +102,33 @@ test('el corrector de repaso rechaza un grado fuera de rango', conAuth, async ()
   });
   assert.strictEqual(r.status, 400, 'un rating de 9 debería dar 400');
 });
+
+// ── IDIOMAS Y MODO TETRIS ─────────────────────────────────
+// Sólo GET: el test se puede lanzar contra producción, y abrir una noche
+// (POST /tetris/noche) haría el sorteo de verdad para ese día.
+
+test('cada idioma sólo devuelve sus palabras', conAuth, async () => {
+  for (const lang of ['en', 'fr']) {
+    const ws = await (await get(`/words?lang=${lang}`)).json();
+    assert.ok(Array.isArray(ws));
+    const ajenas = ws.filter((w) => w.lang !== lang);
+    assert.strictEqual(ajenas.length, 0, `${lang}: ${ajenas.length} palabras de otro idioma`);
+  }
+});
+
+test('en francés no se calcula figurada inglesa', conAuth, async () => {
+  const ws = await (await get('/user-words?lang=fr')).json();
+  if (!Array.isArray(ws) || !ws.length) return;   // francés aún sin migrar
+  assert.ok(ws.every((w) => !w.pron), 'una palabra francesa no puede llevar la figurada del motor inglés');
+});
+
+test('el test del despertar es a ciegas: no dice qué palabras sonaron', conAuth, async () => {
+  const texto = await (await get('/tetris/despertar')).text();
+  assert.ok(!texto.includes('con_pista'), 'el test del despertar no puede revelar el grupo de cada palabra');
+});
+
+test('el estado del día Tetris siempre dice qué toca', conAuth, async () => {
+  const t = await (await get('/tetris/hoy')).json();
+  assert.ok(['despertar', 'ronda', 'almohada', 'noche', 'hecho'].includes(t.fase), `fase desconocida: ${t.fase}`);
+  assert.ok(t.resultados && typeof t.resultados.veredicto === 'string');
+});

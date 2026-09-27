@@ -130,6 +130,10 @@ const escaparAttr = (s) => escaparHtml(s).replace(/"/g, '&quot;');
 // ── LEER EN VOZ ALTA ─────────────────────────────────────
 // La elección de voz y el audio grabado están en voz.js. Aquí solo queda el
 // nombre de siempre para no tocar los cientos de onclick que ya lo llaman.
+//
+// Lee en el idioma que se está estudiando: la sesión y PALABRAS la usan con
+// palabras del idioma activo. Lo que es siempre inglés —los pares mínimos de
+// abajo— pide la voz inglesa explícitamente.
 function pronDecir(texto, veces = 1, btn) {
   vozDecir(texto, { veces, btn });
 }
@@ -142,7 +146,7 @@ function pronDecir(texto, veces = 1, btn) {
  * fichero por tools/cortar-pares.js. Ver `pronOir`.
  */
 function pronDecirSinGrabar(texto, veces = 1, btn) {
-  vozDecir(texto, { veces, btn, sinGrabado: true });
+  vozDecir(texto, { veces, btn, sinGrabado: true, lang: 'en-GB' });
 }
 
 // ── ESCUCHAR UN PAR ──────────────────────────────────────
@@ -182,7 +186,7 @@ function pronOir(palabra, btn, par) {
   const clave  = String(palabra).toLowerCase();
   const n      = (_pronEscuchas[clave] = (_pronEscuchas[clave] || 0) + 1);
   const lento  = n >= 2 && _pronActual?.lento_ok !== false;
-  vozDecir(palabra, { btn, lento, sinGrabado: !par?.audio_ok });
+  vozDecir(palabra, { btn, lento, sinGrabado: !par?.audio_ok, lang: 'en-GB' });
 
   // El botón se anuncia solo. Un botón que hace dos cosas distintas sin avisar
   // se lee como un fallo, no como una función.
@@ -205,13 +209,13 @@ function pronOir(palabra, btn, par) {
 function pronOirLasDos(a, b, btn, par) {
   const pausa = 700;
   const di = (palabra, retraso) => setTimeout(() => {
-    vozDecir(palabra, { sinGrabado: !par?.audio_ok });
+    vozDecir(palabra, { sinGrabado: !par?.audio_ok, lang: 'en-GB' });
   }, retraso);
   if (btn) {
     btn.classList.add('anim-pulse');
     setTimeout(() => btn.classList.remove('anim-pulse'), pausa * 2 + 900);
   }
-  vozDecir(a, { sinGrabado: !par?.audio_ok });
+  vozDecir(a, { sinGrabado: !par?.audio_ok, lang: 'en-GB' });
   di(b, pausa);
   di(a, pausa * 2);
 }
@@ -221,6 +225,12 @@ async function initPron() {
   const c = document.getElementById('pron-content');
   if (!c || _pronInited) return;
   _pronInited = true;
+
+  // Todo lo de este fichero —figurada, pares mínimos, trampas— es del inglés.
+  // Con el francés activo, SONIDOS enseña los sonidos del francés (sons.js).
+  if (typeof _idioma !== 'undefined' && _idioma === 'fr' && typeof initSons === 'function') {
+    return initSons();
+  }
 
   // La primera vez, la introducción va por delante: sin ella la figurada es un
   // montón de letras raras. Después no vuelve a aparecer sola.

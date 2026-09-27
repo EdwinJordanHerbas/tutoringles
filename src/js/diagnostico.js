@@ -26,6 +26,8 @@ let _dgEstado = null;      // lo que devuelve GET /diagnostico
 async function pintarDiagnosticoHoy() {
   const caja = document.getElementById('diag-hoy');
   if (!caja) return;
+  // El test de nivel es del Cambridge: con el francés activo no pinta nada.
+  if (typeof _idioma !== 'undefined' && _idioma !== 'en') { caja.innerHTML = ''; return; }
   try {
     _dgEstado = await apiGet('/diagnostico');
   } catch { return; }

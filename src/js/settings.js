@@ -8,11 +8,12 @@ async function initSettings() {
   if (!container) return;
   container.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
   try {
-    const [examDate, vocabTarget, level, planStart] = await Promise.all([
+    const [examDate, vocabTarget, level, planStart, tetris] = await Promise.all([
       apiGet('/config/target_exam_date'),
       apiGet('/config/daily_vocab_target'),
       apiGet('/config/user_level'),
       apiGet('/config/plan_start_date'),
+      apiGet('/tetris/hoy').catch(() => null),
     ]);
     if (typeof cargarPushCfg === 'function') await cargarPushCfg();
     renderSettings2({
@@ -20,6 +21,7 @@ async function initSettings() {
       vocab_target: vocabTarget?.value || '8',
       level: level?.value || 'B1',
       plan_start: planStart?.value || null,
+      tetris,
     });
   } catch (e) {
     container.innerHTML = cajaError(e);
@@ -29,11 +31,24 @@ async function initSettings() {
 function renderSettings2(s) {
   const container = document.getElementById('settings-content');
   const levels = ['A2', 'B1', 'B2', 'C1'];
+  const frances = typeof _idioma !== 'undefined' && _idioma === 'fr';
   container.innerHTML = `
     ${typeof renderAvisos === 'function' ? renderAvisos() : ''}
 
     <div class="glass-card" style="margin-top:8px">
-      <div class="card-title">EXAMEN OBJETIVO</div>
+      <div class="card-title">IDIOMA</div>
+      <p style="font-size:0.78rem;color:var(--text-2);margin-bottom:12px">
+        Estás estudiando <b>${frances ? 'francés' : 'inglés'}</b>. Las palabras, las situaciones,
+        la gramática y la sesión de cinco minutos son las de ese idioma; el progreso
+        de cada uno se guarda aparte.
+      </p>
+      <button class="btn btn-subtle" onclick="cambiarIdioma()">PASAR A ${frances ? 'INGLÉS' : 'FRANCÉS'}</button>
+    </div>
+
+    ${typeof renderTetrisAjustes === 'function' ? renderTetrisAjustes(s.tetris) : ''}
+
+    <div class="glass-card" style="margin-top:8px">
+      <div class="card-title">EXAMEN OBJETIVO · INGLÉS</div>
       <div class="field">
         <label>Fecha del examen CAE</label>
         <input class="field-input" type="date" id="set-exam-date" value="${s.exam_date}">
@@ -58,7 +73,7 @@ function renderSettings2(s) {
     ${renderVozAjustes()}
 
     <div class="glass-card" style="margin-top:8px">
-      <div class="card-title">PLAN DE 30 DÍAS</div>
+      <div class="card-title">PLAN DE 30 DÍAS · INGLÉS</div>
       <p style="font-size:0.76rem;color:var(--text-3);margin-bottom:12px">
         ${s.plan_start ? `Iniciado el ${new Date(s.plan_start).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}.` : 'Aún no has empezado el plan.'}
       </p>
@@ -79,13 +94,16 @@ function renderVozAjustes() {
   if (typeof vozListar !== 'function') return '';
   const voces  = vozListar();
   const actual = typeof mejorVoz === 'function' ? mejorVoz() : null;
+  // Una voz por idioma: aquí se elige la del que se está estudiando.
+  const lengua = typeof _idioma !== 'undefined' && _idioma === 'fr' ? 'francés' : 'inglés';
+  const adj    = lengua === 'francés' ? 'francesa' : 'inglesa';
 
   if (!voces.length) {
     return `
       <div class="glass-card" style="margin-top:8px">
         <div class="card-title">VOZ DEL MÓVIL</div>
         <div class="field-pista">
-          Este móvil no tiene ninguna voz inglesa instalada, así que el inglés
+          Este móvil no tiene ninguna voz ${adj} instalada, así que el ${lengua}
           se lee con la voz del sistema y suena mal. En iPhone se añaden en
           Ajustes › Accesibilidad › Contenido hablado › Voces.
         </div>
@@ -96,7 +114,7 @@ function renderVozAjustes() {
     <div class="glass-card" style="margin-top:8px">
       <div class="card-title">VOZ DEL MÓVIL</div>
       <div class="field">
-        <label>Voz para leer el inglés</label>
+        <label>Voz para leer el ${lengua}</label>
         <select class="field-input" id="set-voz" onchange="cambiarVoz(this.value)">
           ${voces.map((v) => `
             <option value="${escaparAttr(v.voiceURI)}" ${actual && v.voiceURI === actual.voiceURI ? 'selected' : ''}>
@@ -104,8 +122,9 @@ function renderVozAjustes() {
             </option>`).join('')}
         </select>
         <div class="field-pista">
-          Solo afecta a lo que lee el móvil. Las frases de tu sector tienen voz
-          grabada y no cambian.
+          ${lengua === 'francés'
+            ? 'Si tienes una voz suiza (fr-CH) o de Francia, mejor que una de Quebec (fr-CA): el acento canadiense no es el que vas a oír allí. También es la voz del modo noche.'
+            : 'Solo afecta a lo que lee el móvil. Las frases de tu sector tienen voz grabada y no cambian.'}
         </div>
       </div>
       <button class="btn btn-subtle" onclick="probarVoz(this)">PROBAR ESTA VOZ</button>
@@ -119,7 +138,10 @@ function cambiarVoz(voiceURI) {
 }
 
 function probarVoz(btn) {
-  vozDecir('Would you like to try them on? Here is your receipt.', { btn });
+  const frances = typeof _idioma !== 'undefined' && _idioma === 'fr';
+  vozDecir(frances
+    ? 'Bonjour ! Vous cherchez une pointure en particulier ? Ça fait septante-neuf francs.'
+    : 'Would you like to try them on? Here is your receipt.', { btn });
 }
 
 async function saveSettings() {
