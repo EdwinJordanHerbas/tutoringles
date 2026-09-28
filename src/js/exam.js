@@ -47,6 +47,8 @@ async function initExam() {
 
 function renderExamDashboard() {
   const container = document.getElementById('exam-content');
+  // Con el francés activo, este panel es el del DALF y no el del Cambridge.
+  if (typeof _idioma !== 'undefined' && _idioma === 'fr') return renderExamDashboardFr();
 
   // Calcular promedio por sección
   const avgBySection = {};
@@ -59,7 +61,6 @@ function renderExamDashboard() {
   });
 
   container.innerHTML = `
-    ${typeof _idioma !== 'undefined' && _idioma === 'fr' ? examTarjetaDalf() : ''}
     <div class="glass-card-accent anim-fade-in" style="margin-bottom:14px">
       <div class="card-title">PRACTICAR · USE OF ENGLISH</div>
       <p style="font-size:0.72rem;color:var(--text-3);margin-bottom:10px">Test interactivo con corrección automática. Elige una parte:</p>
@@ -184,13 +185,17 @@ async function loadReadingTasks() {
     }
     box.innerHTML = tasks.map(t => {
       const info = READING_PARTS[t.part] || { n: '?', nombre: t.part, desc: '' };
+      // Los del francés no son partes de un paper: son escalones de nivel.
+      const titulo = t.lang === 'fr' ? _esc(t.title) : `Parte ${info.n} · ${info.nombre}`;
+      const meta   = t.lang === 'fr' ? `${t.questions} preguntas` : `${info.desc} · ${t.questions} preguntas`;
+      const nivel  = t.level || 'C1';
       return `
         <button class="topic-item" style="width:100%;margin-bottom:6px" onclick="startReading('${t.slug}')">
           <div class="topic-item-info">
-            <div class="topic-item-title">Parte ${info.n} · ${info.nombre}</div>
-            <div class="topic-item-meta">${info.desc} · ${t.questions} preguntas</div>
+            <div class="topic-item-title">${titulo}</div>
+            <div class="topic-item-meta">${meta}</div>
           </div>
-          <span class="badge badge-c1">C1</span>
+          <span class="badge badge-${nivel.toLowerCase()}">${nivel}</span>
         </button>`;
     }).join('');
   } catch (e) {
@@ -234,7 +239,7 @@ function renderReading() {
     <button class="btn btn-subtle btn-sm" onclick="renderExamDashboard()" style="margin-bottom:12px">← VOLVER</button>
 
     <div class="glass-card-accent anim-slide-up" style="margin-bottom:12px">
-      <div class="card-title">PARTE ${info.n} · ${info.nombre.toUpperCase()}</div>
+      <div class="card-title">${t.lang === 'fr' ? `COMPRENSIÓN ESCRITA · ${t.level}` : `PARTE ${info.n} · ${info.nombre.toUpperCase()}`}</div>
       <div style="font-size:0.8rem;font-weight:600;color:var(--text);margin-bottom:4px">${_esc(t.title)}</div>
       <div style="font-size:0.72rem;color:var(--text-3)">${_esc(t.intro || '')}</div>
     </div>
@@ -286,11 +291,16 @@ async function submitReading() {
 
   try {
     const r = await apiPost('/exam-quiz/grade', { answers });
-    // Reading cuenta como sección 'reading' en el historial
-    await apiPost('/exam-attempts', {
-      section: 'reading', score: r.aciertos, max_score: r.total,
-      notes: `Parte ${READING_PARTS[t.part]?.n || ''} · ${t.title}`
-    });
+    // Reading cuenta como sección 'reading' en el historial, en su idioma. Y
+    // sólo si es de nivel de examen: un 90 % en un texto de B1 no dice que
+    // leas en C1 (misma regla que ESCRIBIR). Los de francés B1 y B2 quedan
+    // como práctica.
+    if ((t.level || 'C1') === 'C1') {
+      await apiPost('/exam-attempts', {
+        section: 'reading', score: r.aciertos, max_score: r.total, lang: t.lang || 'en',
+        notes: t.lang === 'fr' ? `Compréhension écrite · ${t.title}` : `Parte ${READING_PARTS[t.part]?.n || ''} · ${t.title}`
+      });
+    }
     await apiPost('/study-sessions', { type: 'reading', score: r.score, duration_minutes: 15 });
     renderReadingResults(r);
   } catch (e) {
@@ -556,23 +566,60 @@ async function saveExamResult() {
 }
 
 /**
- * Con el francés activo, SIMULACROS empieza por el DALF: qué es y en qué fase
- * del plan entra. Los simulacros de debajo siguen siendo del Cambridge, y se
- * dice, para que nadie crea que está haciendo un examen de francés.
+ * SIMULACROS con el francés activo: el panel del DALF. Comprensión oral y
+ * escrita en tres escalones (B1 → B2 → C1) y, para la producción, las puertas a
+ * ESCRIBIR y HABLAR. Antes esta pantalla enseñaba el Cambridge con un aviso
+ * encima; mezclar los dos exámenes en la misma lista confundía más que ayudaba.
  */
-function examTarjetaDalf() {
-  return `
+function renderExamDashboardFr() {
+  const container = document.getElementById('exam-content');
+  container.innerHTML = `
     <div class="glass-card anim-fade-in" style="margin-bottom:14px">
       <div class="card-title">DALF C1 · EL EXAMEN DE FRANCÉS</div>
       <div style="font-size:0.78rem;color:var(--text-2);line-height:1.6">
-        Cuatro pruebas: comprensión oral, comprensión escrita, <b>producción
-        escrita</b> (una síntesis de documentos y un ensayo argumentado) y
-        <b>producción oral</b> (un exposé a partir de documentos y un debate con
-        el tribunal). Se aprueba con 50 de 100 y un mínimo en cada prueba.<br><br>
-        Es la fase 3 del plan del francés. La producción escrita está en
-        ESCRIBIR y la oral en HABLAR; la comprensión oral y escrita del DALF
-        todavía no está en la app. Lo de abajo es el <b>Cambridge (inglés)</b>.
+        Cuatro pruebas: comprensión oral, comprensión escrita, producción
+        escrita (síntesis de documentos y ensayo argumentado) y producción oral
+        (exposé y debate). Se aprueba con 50 de 100 y un mínimo en cada prueba.
+      </div>
+    </div>
+
+    <div class="glass-card-accent anim-fade-in" style="margin-bottom:14px">
+      <div class="card-title">COMPRENSIÓN ORAL</div>
+      <p style="font-size:0.72rem;color:var(--text-3);margin-bottom:10px">
+        De B1 a C1. <b>Empieza por el B1: es tu prueba inicial</b> de lo que entiendes
+        al oído. Dos escuchas, como en el examen.
+      </p>
+      <div id="listening-tasks"><div class="empty-state" style="padding:8px 0"><div class="spinner"></div></div></div>
+    </div>
+
+    <div class="glass-card-accent anim-fade-in" style="margin-bottom:14px">
+      <div class="card-title">COMPRENSIÓN ESCRITA</div>
+      <p style="font-size:0.72rem;color:var(--text-3);margin-bottom:10px">
+        De B1 a C1, y el B1 también es prueba inicial. Sólo los C1 cuentan como
+        nota de examen; los otros, como práctica.
+      </p>
+      <div id="reading-tasks"><div class="empty-state" style="padding:8px 0"><div class="spinner"></div></div></div>
+    </div>
+
+    <div class="glass-card anim-fade-in" style="margin-bottom:14px">
+      <div class="card-title">PRODUCCIÓN</div>
+      <div class="quick-grid quick-grid-2" style="margin-top:8px">
+        <button class="quick-btn" onclick="goTo('escribir')">
+          <span class="quick-icon">${ico('writing', 22)}</span><span>Escribir</span>
+        </button>
+        <button class="quick-btn" onclick="goTo('speak')">
+          <span class="quick-icon">${ico('mic', 22)}</span><span>Hablar</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="glass-card anim-fade-in">
+      <div style="font-size:0.74rem;color:var(--text-3);line-height:1.55">
+        Los simulacros del Cambridge siguen aquí con el inglés activo.
       </div>
       <button class="btn btn-subtle btn-sm" onclick="cambiarIdioma()" style="margin-top:10px">PASAR A INGLÉS</button>
     </div>`;
+
+  loadReadingTasks();
+  if (typeof loadListeningTasks === 'function') loadListeningTasks();
 }

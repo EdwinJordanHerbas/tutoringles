@@ -5,6 +5,8 @@
 // escrito a mano en la migración base, con `exam_attempts` a cero: nunca se
 // había medido nada. Daba igual mientras el examen estaba en diciembre. Con la
 // fecha movida a finales de octubre deja de dar igual, porque la diferencia
+// (El 28-sep-2026 el examen se quedó sin fecha: sigue siendo el objetivo, pero
+// la medición importa igual, porque es lo que dice cuánto camino queda.)
 // entre estar en B1 o en B2 alto son dos meses de trabajo distinto y el plan se
 // construye encima de ese dato.
 //
@@ -50,8 +52,7 @@ async function pintarDiagnosticoHoy() {
       <div class="card-title">ANTES DE NADA: ¿DE DÓNDE PARTES?</div>
       <div class="diag-texto">
         La app dice que estás en <b>B1</b>, pero ese dato lo escribimos nosotros:
-        <b>no se ha medido nunca</b>. Con el examen ${dias != null ? `a <b>${dias} días</b>` : 'a la vuelta'},
-        el plan entero depende de saberlo.
+        <b>no se ha medido nunca</b>. ${dias != null ? `Con el examen a <b>${dias} días</b>, el plan entero depende de saberlo.` : 'Sin fecha de examen, es lo que dice cuánto camino queda hasta el C1.'}
       </div>
       <div class="diag-texto" style="margin-top:8px">
         Son <b>24 preguntas</b> de Use of English, unos 20 minutos. No hay nota que

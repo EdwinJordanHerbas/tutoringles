@@ -52,6 +52,11 @@ function renderSettings2(s) {
       <div class="field">
         <label>Fecha del examen CAE</label>
         <input class="field-input" type="date" id="set-exam-date" value="${s.exam_date}">
+        <div class="field-pista">
+          Vacía = sin fecha: el objetivo sigue, pero sin cuenta atrás. Pon una
+          cuando te inscribas.
+          ${s.exam_date ? '<button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'set-exam-date\').value=\'\'">Quitar la fecha</button>' : ''}
+        </div>
       </div>
       <div class="field">
         <label>Nivel actual</label>
@@ -150,7 +155,8 @@ async function saveSettings() {
   const target   = document.getElementById('set-vocab-target')?.value;
   try {
     await Promise.all([
-      examDate ? apiPut('/config/target_exam_date', { value: examDate }) : Promise.resolve(),
+      // Vacía también se guarda: es como se quita la fecha.
+      apiPut('/config/target_exam_date', { value: examDate || '' }),
       apiPut('/config/user_level', { value: level }),
       apiPut('/config/daily_vocab_target', { value: String(target || 8) }),
     ]);

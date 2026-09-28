@@ -29,7 +29,7 @@ async function loadListeningTasks() {
           <div class="topic-item-title">${_esc(t.title)}</div>
           <div class="topic-item-meta">${t.questions} preguntas${t.audio_url ? ' · audio grabado' : ' · voz del navegador'}</div>
         </div>
-        <span class="badge badge-c1">C1</span>
+        <span class="badge badge-${(t.level || 'C1').toLowerCase()}">${t.level || 'C1'}</span>
       </button>`).join('');
   } catch (e) {
     box.innerHTML = cajaError(e);
@@ -60,7 +60,7 @@ function renderListening() {
     <button class="btn btn-subtle btn-sm" onclick="renderExamDashboard()" style="margin-bottom:12px">← VOLVER</button>
 
     <div class="glass-card-accent anim-slide-up">
-      <div class="card-title">LISTENING · PARTE ${t.part}</div>
+      <div class="card-title">${t.lang === 'fr' ? `COMPRENSIÓN ORAL · ${t.level}` : `LISTENING · PARTE ${t.part}`}</div>
       <div style="font-size:0.85rem;font-weight:600;color:var(--text);margin-bottom:6px">${_esc(t.title)}</div>
       <div style="font-size:0.76rem;color:var(--text-2);line-height:1.55">${_esc(t.intro || '')}</div>
     </div>
@@ -76,6 +76,7 @@ function renderListening() {
         <div style="font-size:0.66rem;color:var(--warning);margin-top:8px;line-height:1.5">
           Locutado con la voz del navegador. Suena más plano que el audio real
           del examen y no cambia de acento entre hablantes.
+          ${t.lang === 'fr' ? 'En el examen oirás acentos de verdad, también suizos: esto entrena el oído, pero es la versión fácil.' : ''}
         </div>` : ''}
     </div>
 
@@ -184,10 +185,13 @@ async function submitListening() {
 
   try {
     const r = await apiPost('/exam-quiz/grade', { answers });
-    await apiPost('/exam-attempts', {
-      section: 'listening', score: r.aciertos, max_score: r.total,
-      notes: `Parte ${t.part} · ${t.title}`
-    });
+    // Misma regla que Reading y ESCRIBIR: sólo el nivel de examen es nota.
+    if ((t.level || 'C1') === 'C1') {
+      await apiPost('/exam-attempts', {
+        section: 'listening', score: r.aciertos, max_score: r.total, lang: t.lang || 'en',
+        notes: t.lang === 'fr' ? `Compréhension orale · ${t.title}` : `Parte ${t.part} · ${t.title}`
+      });
+    }
     await apiPost('/study-sessions', { type: 'exam', score: r.score, duration_minutes: 15, notes: 'Listening' });
     renderReadingResults(r);   // el panel de resultados es el mismo
   } catch (e) {

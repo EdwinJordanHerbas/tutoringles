@@ -20,6 +20,7 @@ const vacio = {
   gramatica:   { B1: { total: 4, hechas: 0 }, B2: { total: 3, hechas: 0 }, C1: { total: 1, hechas: 0 } },
   correos:     { total: 5, hechas: 0 },
   dalf:        { total: 4, hechas: 0 },
+  comprension: { total: 2, hechas: 0 },
 };
 
 test('al empezar, la fase actual es la primera y ninguna está hecha', () => {
@@ -58,15 +59,19 @@ test('un objetivo sin contenido no se da por cumplido', () => {
   assert.strictEqual(f[0].objetivos[2].pct, 0);
 });
 
-test('la comprensión del DALF, que aún no existe, no cuenta en el porcentaje', () => {
+test('la fase 3 exige aprobar la comprensión oral Y la escrita', () => {
   const d = structuredClone(vacio);
   d.palabras.academic.consolidadas = 35;
   d.gramatica.B2.hechas = 3;
   d.gramatica.C1.hechas = 1;
   d.dalf.hechas = 4;
+  d.comprension.hechas = 1;
+  assert.ok(fasesFrances(d)[2].pct < 100, 'con una de las dos no basta');
+  d.comprension.hechas = 2;
   const f = fasesFrances(d)[2];
   assert.strictEqual(f.pct, 100);
-  assert.ok(f.objetivos.some((o) => o.pendienteApp));
+  const obj = f.objetivos.find((o) => /Comprensión/.test(o.texto));
+  assert.deepStrictEqual([obj.hechas, obj.meta, obj.pendienteApp], [2, 2, false]);
 });
 
 test('la fase 3 no se cumple sin escribir las tareas del DALF', () => {

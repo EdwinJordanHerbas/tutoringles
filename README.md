@@ -134,6 +134,8 @@ docker exec -i postgres psql -U postgres -d tutoringles -v ON_ERROR_STOP=1 < mig
 | `migration_28_ingles_c1.sql` | 116 entradas más de inglés C1 |
 | `migration_29_escribir_y_oral_por_idioma.sql` | Idioma y nivel en tareas y notas |
 | `migration_30_frances_escribir_y_oral.sql` | Correos para Suiza, síntesis y ensayo del DALF, y el oral |
+| `migration_31_comprension_por_idioma_y_sin_fecha.sql` | Idioma en Reading/Listening; el CAE sin fecha |
+| `migration_32_frances_comprension.sql` | Comprensión oral y escrita en francés, B1 → C1 |
 
 **Ojo:** desde la 07, todo el progreso cuelga de `profile_id` y los índices únicos
 son compuestos. Cualquier `ON CONFLICT` nuevo debe nombrar las dos columnas

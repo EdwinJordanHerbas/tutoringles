@@ -63,8 +63,23 @@ del servidor y tiene que saber de qué idioma hablar.
   trabajar → DALF C1, y se pasa de fase cuando los datos lo dicen. Una palabra cuenta cuando está
   **consolidada** (estabilidad FSRS ≥ 7 días), no por haberla acertado una vez. El plan de 30 días
   sigue siendo del inglés.
-- **Lo que sólo existe en inglés lo dice**: SIMULACROS (Reading, Listening, Use of English) es del
-  Cambridge, y con el francés activo avisa arriba. Su panel pide siempre `/exam-attempts?lang=en`.
+- **SIMULACROS cambia entero con el idioma**: en inglés, el Cambridge (su panel pide siempre
+  `/exam-attempts?lang=en`); en francés, el panel del DALF (`renderExamDashboardFr`).
+
+### Comprensión en francés y el Cambridge sin fecha (28-sep-2026)
+
+- **Comprensión oral y escrita del francés en tres escalones, B1 → B2 → C1** (migración 32, en
+  las mismas tablas que el Reading y el Listening del CAE, con `lang`). **Los B1 son la prueba
+  inicial** de comprensión. Las preguntas van en francés, como en el DELF/DALF. Los guiones los lee
+  la voz francesa del móvil (`speaker = 'fr-FR'`): no hay audio grabado del francés, porque el
+  audio grabado se hacía en Higgsfield y esa cuenta ya no existe.
+- **Sólo lo C1 es nota de examen**, en Reading y Listening igual que en ESCRIBIR: el cliente sólo
+  manda `/exam-attempts` si `level === 'C1'`. Un 90 % en un texto de B1 no dice que leas en C1.
+- **La fase 3 cuenta la comprensión**: aprobada (≥ 50 % en un C1) la oral y la escrita, por
+  separado, como exige el DALF. Ya no queda ningún objetivo "aún no está en la app".
+- **El Cambridge no tiene fecha.** Sigue siendo objetivo, pero la del 31-oct se quitó (migración
+  31, sólo si seguía siendo ésa). Sin fecha no hay cuenta atrás en PROGRESO —antes se caía al
+  1-dic "por defecto"— y en Ajustes la fecha se puede dejar vacía.
 
 ### Escribir, el oral y el nivel en francés (28-sep-2026)
 
@@ -511,7 +526,8 @@ acumulativas idempotentes**, que se aplican a mano y en orden:
 audio fiable → `_21` situaciones por tandas → `_22`/`_23` test de nivel → `_24` idiomas y modo
 Tetris → `_25` vocabulario de francés (217, **el orden de las filas es el orden de estudio**) →
 `_26` situaciones de la Suiza romanda → `_27` gramática de francés → `_28` más inglés C1 (116) →
-`_29` idioma y nivel en escribir, el oral y las notas → `_30` tareas de escribir y del oral en francés.
+`_29` idioma y nivel en escribir, el oral y las notas → `_30` tareas de escribir y del oral en francés →
+`_31` comprensión por idioma y Cambridge sin fecha → `_32` comprensión oral y escrita en francés.
 
 **Ojo: las tablas son de `postgres`, no del usuario `tutoringles`.** Cualquier migración con
 `ALTER TABLE` hay que aplicarla con `-U postgres` o responde `must be owner of table`. La

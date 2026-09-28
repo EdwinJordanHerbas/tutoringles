@@ -358,7 +358,7 @@ app.use((req, res, next) => {
   // Config
   if (path.startsWith('/config/') && method === 'GET') {
     const key = path.split('/config/')[1];
-    const defaults = { user_level: 'B1', target_exam_date: '2026-12-01', daily_vocab_target: '20', xp_total: '340' };
+    const defaults = { user_level: 'B1', target_exam_date: '', daily_vocab_target: '8', xp_total: '340' };
     return res.json({ key, value: defaults[key] ?? null });
   }
 
@@ -1112,19 +1112,22 @@ app.post('/diagnostico/fr', async (req, res) => {
 // Tareas disponibles, con cuántas preguntas trae cada una.
 app.get('/reading/tasks', async (req, res) => {
   try {
+    // Del idioma activo. En francés van de menos a más nivel (B1 → C1): el B1
+    // es la prueba inicial de comprensión escrita.
     const { rows } = await db(
-      `SELECT t.id, t.slug, t.part, t.title, t.intro, t.level,
+      `SELECT t.id, t.slug, t.part, t.title, t.intro, t.level, t.lang,
               COUNT(q.id)::int AS questions
          FROM exam_texts t
          LEFT JOIN exam_questions q ON q.text_id = t.id
         WHERE t.part IN ('reading_mc','cross_text','gapped_text','multi_match')
+          AND t.lang = $1
         GROUP BY t.id
-        ORDER BY CASE t.part
+        ORDER BY t.level, CASE t.part
                    WHEN 'reading_mc'   THEN 5
                    WHEN 'cross_text'   THEN 6
                    WHEN 'gapped_text'  THEN 7
                    WHEN 'multi_match'  THEN 8
-                 END`
+                 END, t.id`, [await idiomaDe(req)]
     );
     res.json(rows);
   } catch (e) { fallo(res, e); }
@@ -1361,11 +1364,12 @@ app.post('/situations/:id/practice', async (req, res) => {
 app.get('/listening/tasks', async (req, res) => {
   try {
     const { rows } = await db(
-      `SELECT t.id, t.slug, t.part, t.title, t.intro, t.audio_url, t.speaker, t.level,
+      `SELECT t.id, t.slug, t.part, t.title, t.intro, t.audio_url, t.speaker, t.level, t.lang,
               COUNT(q.id)::int AS questions
          FROM listening_tasks t
          LEFT JOIN exam_questions q ON q.listening_id = t.id
-        GROUP BY t.id ORDER BY t.part`
+        WHERE t.lang = $1
+        GROUP BY t.id ORDER BY t.level, t.part, t.id`, [await idiomaDe(req)]
     );
     res.json(rows);
   } catch (e) { fallo(res, e); }
@@ -1832,7 +1836,7 @@ app.put('/idioma', async (req, res) => {
 // de una a otra cuando los datos lo dicen.
 app.get('/plan/fases', async (req, res) => {
   try {
-    const [pal, sit, gram, esc] = await Promise.all([
+    const [pal, sit, gram, esc, comp] = await Promise.all([
       db(`SELECT w.category, count(*)::int AS total,
                  count(*) FILTER (WHERE uw.stability >= 7)::int AS consolidadas,
                  count(*) FILTER (WHERE uw.reps > 0)::int AS vistas
@@ -1864,6 +1868,13 @@ app.get('/plan/fases', async (req, res) => {
             FROM writing_tasks t
            WHERE t.lang = 'fr'
            GROUP BY 1`, [PROFILE_ID]),
+      // Comprensión: de las dos pruebas, cuántas tienen algún intento con un
+      // 50 % o más. Sólo los textos y audios C1 dejan intento (los B1 y B2 son
+      // práctica), así que esto ya es "un C1 aprobado".
+      db(`SELECT count(DISTINCT section)::int AS hechas
+            FROM exam_attempts
+           WHERE profile_id = $1 AND lang = 'fr' AND section IN ('listening','reading')
+             AND score::float / NULLIF(max_score, 0) >= 0.5`, [PROFILE_ID]),
     ]);
     const porClave = (rows, clave) => Object.fromEntries(rows.map((r) => [r[clave], r]));
     const palabras = porClave(pal.rows, 'category');
@@ -1874,6 +1885,7 @@ app.get('/plan/fases', async (req, res) => {
         gramatica: porClave(gram.rows, 'level'),
         correos: esc.rows.find((r) => !r.dalf),
         dalf:    esc.rows.find((r) => r.dalf),
+        comprension: { total: 2, hechas: comp.rows[0]?.hechas || 0 },
       }),
       vistas: pal.rows.reduce((a, r) => a + r.vistas, 0),
       total: pal.rows.reduce((a, r) => a + r.total, 0),
