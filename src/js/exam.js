@@ -36,7 +36,9 @@ async function initExam() {
   container.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
 
   try {
-    _examAttempts = await apiGet('/exam-attempts') || [];
+    // Siempre las del inglés: este panel es del Cambridge, y con el francés
+    // activo el servidor devolvería las notas del DALF.
+    _examAttempts = await apiGet('/exam-attempts?lang=en') || [];
     renderExamDashboard();
   } catch (e) {
     container.innerHTML = cajaError(e);
@@ -532,7 +534,7 @@ function renderQuizResults(res) {
     <button class="btn btn-primary" onclick="startQuiz('${_quiz.part}')" style="margin-top:6px">OTRA RONDA →</button>
   `;
   // Refrescar historial subyacente
-  apiGet('/exam-attempts').then((a) => { _examAttempts = a || []; }).catch(() => {});
+  apiGet('/exam-attempts?lang=en').then((a) => { _examAttempts = a || []; }).catch(() => {});
 }
 
 async function saveExamResult() {
@@ -567,8 +569,9 @@ function examTarjetaDalf() {
         escrita</b> (una síntesis de documentos y un ensayo argumentado) y
         <b>producción oral</b> (un exposé a partir de documentos y un debate con
         el tribunal). Se aprueba con 50 de 100 y un mínimo en cada prueba.<br><br>
-        Es la fase 3 del plan del francés. Los simulacros del DALF todavía no
-        están en la app: lo de abajo es el <b>Cambridge (inglés)</b>.
+        Es la fase 3 del plan del francés. La producción escrita está en
+        ESCRIBIR y la oral en HABLAR; la comprensión oral y escrita del DALF
+        todavía no está en la app. Lo de abajo es el <b>Cambridge (inglés)</b>.
       </div>
       <button class="btn btn-subtle btn-sm" onclick="cambiarIdioma()" style="margin-top:10px">PASAR A INGLÉS</button>
     </div>`;

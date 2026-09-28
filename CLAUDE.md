@@ -23,7 +23,7 @@ Suiza en torno a un mes. Francés A2 (entiende mucho, no consigue explicarse), i
 | Comando | Qué hace |
 |---|---|
 | `npm start` | `node server.js` |
-| `npm test` | `node --test` — tests nativos de Node (114, de los que 12 se saltan sin servidor) |
+| `npm test` | `node --test` — tests nativos de Node (126, de los que 13 se saltan sin servidor) |
 | `npm run test:fsrs` | tests del algoritmo de repetición espaciada |
 | `node tools/generar-lexico.js` | regenera el diccionario de pronunciación |
 
@@ -63,9 +63,29 @@ del servidor y tiene que saber de qué idioma hablar.
   trabajar → DALF C1, y se pasa de fase cuando los datos lo dicen. Una palabra cuenta cuando está
   **consolidada** (estabilidad FSRS ≥ 7 días), no por haberla acertado una vez. El plan de 30 días
   sigue siendo del inglés.
-- **Lo que sólo existe en inglés lo dice**: SIMULACROS, ESCRIBIR y el test de nivel son del
-  Cambridge; con el francés activo el test de nivel no se pinta y las otras dos avisan arriba. El
-  nivel del francés sale "—" en la cabecera: no hay ninguna medición del DALF todavía.
+- **Lo que sólo existe en inglés lo dice**: SIMULACROS (Reading, Listening, Use of English) es del
+  Cambridge, y con el francés activo avisa arriba. Su panel pide siempre `/exam-attempts?lang=en`.
+
+### Escribir, el oral y el nivel en francés (28-sep-2026)
+
+- **Las notas van por idioma** (`exam_attempts.lang`, migración 29). `/stats` y `/exam-attempts`
+  filtran por el idioma activo; un ensayo del DALF no entra en la media del Writing del CAE.
+- **ESCRIBIR y el oral de HABLAR dan las tareas del idioma activo** (`writing_tasks.lang`,
+  `speaking_tasks.lang`). En francés hay dos tipos (`nivel`): correos y cartas para el primer mes
+  en Suiza (B1/B2) y la síntesis y el ensayo del DALF (C1); en el oral, hablar de ti (B1) y el
+  exposé y el debate del DALF, cuyo `prompts.documents` es el dossier.
+- **Sólo las tareas C1 cuentan como intento de examen.** Un 18/20 en un correo de B1 no dice que
+  escribas en C1, y si contase, la cabecera se inventaría un nivel.
+- **La rúbrica cambia con el idioma de la tarea**: los mismos cuatro números en las mismas
+  columnas, pero con los criterios del DALF (`RUBRICA_FR` en writing.js). Es una autoevaluación
+  simplificada —el DALF real puntúa sobre 25— y la pantalla lo dice.
+- **El test de nivel del francés no es el del inglés** (`lib/test-frances.js`,
+  `/diagnostico/fr`). El del inglés mide cuánto falta para aprobar un C1; éste UBICA: 24 preguntas
+  de opciones en cuatro franjas (A2 → C1), y el nivel es la franja más alta superada con 4 de 6
+  **sin saltarse ninguna**. Cada pregunta trae "No lo sé", y hay un test que simula 2.000 personas
+  adivinando: casi nunca pasan de A2. **Las opciones se barajan en cada petición**: escritas a
+  mano, la buena iba siempre la primera. Guarda en `config.nivel_medido_fr`, y la cabecera enseña
+  ese nivel cuando no hay destrezas medidas (`stats.nivel_test`).
 
 ### El modo Tetris
 
@@ -490,7 +510,8 @@ acumulativas idempotentes**, que se aplican a mano y en orden:
 `_19` correcciones de los pares (la h, r/l, e-fantasma, AFI y orden) → `_20` qué pares tienen
 audio fiable → `_21` situaciones por tandas → `_22`/`_23` test de nivel → `_24` idiomas y modo
 Tetris → `_25` vocabulario de francés (217, **el orden de las filas es el orden de estudio**) →
-`_26` situaciones de la Suiza romanda → `_27` gramática de francés → `_28` más inglés C1 (116).
+`_26` situaciones de la Suiza romanda → `_27` gramática de francés → `_28` más inglés C1 (116) →
+`_29` idioma y nivel en escribir, el oral y las notas → `_30` tareas de escribir y del oral en francés.
 
 **Ojo: las tablas son de `postgres`, no del usuario `tutoringles`.** Cualquier migración con
 `ALTER TABLE` hay que aplicarla con `-U postgres` o responde `must be owner of table`. La

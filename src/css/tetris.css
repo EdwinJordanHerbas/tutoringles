@@ -283,3 +283,15 @@ body.con-noche { overflow: hidden; }
 .sons-fb { margin-top: 12px; font-size: 0.82rem; color: var(--text-2); }
 .sons-fb.bien b { color: #1f6f3d; }
 .sons-fb.mal b { color: #8a3028; }
+
+/* ── TEST DE NIVEL DEL FRANCÉS: los fallos, corregidos ─── */
+.diag-fallos { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.diag-fallo {
+  font-size: 0.78rem;
+  color: var(--text-2);
+  line-height: 1.5;
+  padding-top: 8px;
+  border-top: 1px solid var(--surface-2);
+}
+.diag-fallo-sol { font-size: 0.74rem; color: var(--text-3); margin-top: 2px; }
+.diag-fallo-sol b { color: #1f6f3d; }

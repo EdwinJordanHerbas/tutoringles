@@ -26,8 +26,8 @@ let _dgEstado = null;      // lo que devuelve GET /diagnostico
 async function pintarDiagnosticoHoy() {
   const caja = document.getElementById('diag-hoy');
   if (!caja) return;
-  // El test de nivel es del Cambridge: con el francés activo no pinta nada.
-  if (typeof _idioma !== 'undefined' && _idioma !== 'en') { caja.innerHTML = ''; return; }
+  // Con el francés activo, el test es otro (ver abajo, "EL TEST DEL FRANCÉS").
+  if (typeof _idioma !== 'undefined' && _idioma === 'fr') return pintarDiagnosticoFrHoy(caja);
   try {
     _dgEstado = await apiGet('/diagnostico');
   } catch { return; }
@@ -227,6 +227,181 @@ async function corregirDiagnostico() {
     caja.scrollIntoView({ behavior: 'smooth', block: 'start' });
     showXpPop(30);
     pintarDiagnosticoHoy();
+  } catch (e) {
+    if (caja) caja.innerHTML = cajaError(e);
+  }
+}
+
+// ══════════════════════ EL TEST DEL FRANCÉS ══════════════════════
+// Otro test: el del inglés mide cuánto falta para aprobar un C1; éste ubica
+// entre A2 y C1 (ver lib/test-frances.js). Todas las preguntas son de opciones,
+// y cada una trae "No lo sé": adivinar estropea la medida.
+
+let _dgFr = null;          // lo que devuelve GET /diagnostico/fr
+
+// El hueco de estas preguntas son tres guiones bajos, no los cuatro de las del
+// Cambridge que busca uoeHueco (exam.js).
+const dgHueco = (html) => String(html ?? '').replace('___', '<span class="quiz-gap">____</span>');
+
+async function pintarDiagnosticoFrHoy(caja) {
+  try {
+    _dgFr = await apiGet('/diagnostico/fr');
+  } catch { caja.innerHTML = ''; return; }
+  if (!_dgFr) return;
+
+  if (_dgFr.ya_hecho) {
+    caja.innerHTML = `
+      <div class="diag-mini">
+        <span>Tu nivel de francés: <b>${escaparDg(_dgFr.nivel_medido)}</b> · ${_dgFr.pct}%</span>
+        <button class="btn btn-ghost btn-sm" onclick="abrirDiagnosticoFr()">Repetir</button>
+      </div>`;
+    return;
+  }
+
+  caja.innerHTML = `
+    <div class="glass-card-accent anim-slide-up diag-card">
+      <div class="card-title">ANTES DE NADA: ¿DE DÓNDE PARTES EN FRANCÉS?</div>
+      <div class="diag-texto">
+        Dices que estás en <b>A2</b>, y es un buen punto de partida, pero el plan
+        por fases se apoya en ese dato y <b>no se ha medido</b>.
+      </div>
+      <div class="diag-texto" style="margin-top:8px">
+        Son <b>24 preguntas</b> de opciones, de A2 a C1, unos 10 minutos. Si no lo
+        sabes, marca «No lo sé»: adivinar estropea la medida.
+      </div>
+      <button class="btn btn-primary" onclick="abrirDiagnosticoFr()" style="margin-top:12px;width:100%">
+        HACER EL TEST DE NIVEL
+      </button>
+    </div>`;
+}
+
+async function abrirDiagnosticoFr() {
+  // Se pinta en el contenedor de EXAMEN, como el del inglés, y por lo mismo sin
+  // la carga automática de esa sección.
+  goTo('exam', { render: false });
+  const c = document.getElementById('exam-content');
+  if (!c) return;
+  c.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+  try {
+    _dgFr = await apiGet('/diagnostico/fr');
+    _dgPreguntas = _dgFr?.preguntas || [];
+    _dgRespuestas = {};
+    if (!_dgPreguntas.length) {
+      c.innerHTML = '<div class="empty-state">No hay preguntas para el test.</div>';
+      return;
+    }
+    renderDiagnosticoFr();
+  } catch (e) {
+    c.innerHTML = cajaError(e);
+  }
+}
+
+function renderDiagnosticoFr() {
+  const c = document.getElementById('exam-content');
+  c.innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="goTo('hoy')" style="margin-bottom:10px">← HOY</button>
+
+    <div class="glass-card-accent anim-slide-up">
+      <div class="card-title">TEST DE NIVEL · FRANCÉS</div>
+      <div style="font-size:0.78rem;color:var(--text-2);line-height:1.6">
+        24 preguntas, de más fácil a más difícil. Elige la opción que completa el
+        hueco. <b>Si no lo sabes, «No lo sé»</b>: cuenta como fallo, pero adivinar
+        cuenta como mentira.
+      </div>
+    </div>
+
+    <div id="diag-preguntas">
+      ${_dgPreguntas.map((q, i) => `
+        <div class="glass-card" style="margin-bottom:10px">
+          <div class="diag-num">${i + 1} de ${_dgPreguntas.length}</div>
+          <div class="diag-prompt">${dgHueco(escaparDg(q.enunciado))}</div>
+          <div class="diag-ops">
+            ${q.opciones.map((op, j) => `
+              <button class="diag-op" id="diag-${q.id}-${j}" onclick="elegirDiagFr(${q.id}, ${j})">
+                ${escaparDg(op)}
+              </button>`).join('')}
+          </div>
+        </div>`).join('')}
+    </div>
+
+    <button class="btn btn-primary" onclick="corregirDiagnosticoFr()" style="width:100%;margin-top:6px">
+      VER MI NIVEL
+    </button>
+    <div id="diag-resultado"></div>`;
+}
+
+function elegirDiagFr(id, idx) {
+  const q = _dgPreguntas.find((x) => x.id === id);
+  const ops = q?.opciones || [];
+  if (!ops[idx]) return;
+  _dgRespuestas[id] = ops[idx];
+  ops.forEach((_, j) => {
+    document.getElementById(`diag-${id}-${j}`)?.classList.toggle('elegida', j === idx);
+  });
+}
+
+async function corregirDiagnosticoFr() {
+  const sinContestar = _dgPreguntas.filter((q) => !_dgRespuestas[q.id]).length;
+  if (sinContestar && !confirm(`Te faltan ${sinContestar}. Las que dejes contarán como «No lo sé». ¿Corregir ya?`)) return;
+
+  const answers = _dgPreguntas.map((q) => ({ id: q.id, response: _dgRespuestas[q.id] ?? '' }));
+  const caja = document.getElementById('diag-resultado');
+  if (caja) caja.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+
+  try {
+    const r = await apiPost('/diagnostico/fr', { answers });
+    const franjas = Object.entries(r.porFranja || {});
+    // Lo que peor sale por tipo dice qué atacar primero.
+    const tipos = Object.entries(r.porTipo || {})
+      .map(([k, v]) => ({ k, ...v, pct: Math.round((v.aciertos / v.total) * 100) }))
+      .sort((a, b) => a.pct - b.pct);
+    const fallos = (r.detalle || []).filter((d) => !d.bien);
+
+    caja.innerHTML = `
+      <div class="glass-card-accent anim-slide-up" style="margin-top:12px">
+        <div class="card-title">TU NIVEL DE FRANCÉS</div>
+        <div class="diag-nivel">${r.nivel === 'A1' ? '&lt; A2' : escaparDg(r.nivel)}</div>
+        <div class="diag-pct">${r.aciertos} de ${r.total} · ${r.pct}%</div>
+        <div class="diag-texto" style="margin-top:10px">${escaparDg(r.texto)}</div>
+
+        <div class="diag-partes">
+          ${franjas.map(([f, v]) => `
+            <div class="diag-parte">
+              <span>Franja ${f}</span>
+              <span class="diag-parte-pct ${v.aciertos < 4 ? 'flojo' : ''}">${v.aciertos}/${v.total}</span>
+            </div>`).join('')}
+        </div>
+
+        <div class="diag-aviso">
+          Mide lo que <b>reconoces</b> por escrito (gramática, léxico y conectores),
+          no cómo hablas. Tú mismo decías que entiendes más de lo que produces: el
+          hueco de producción no sale aquí, sale en HABLAR.
+        </div>
+      </div>
+
+      <div class="glass-card" style="margin-top:10px">
+        <div class="card-title">LO QUE PEOR SALE</div>
+        <div style="font-size:0.8rem;color:var(--text-2);line-height:1.6">
+          <b>${escaparDg(tipos[0]?.k || '—')}</b>, con ${tipos[0]?.aciertos}/${tipos[0]?.total}.
+        </div>
+        ${fallos.length ? `
+          <div class="diag-fallos">
+            ${fallos.slice(0, 8).map((d) => `
+              <div class="diag-fallo">
+                <div>${dgHueco(escaparDg(d.enunciado))}</div>
+                <div class="diag-fallo-sol">→ <b>${escaparDg(d.correcta)}</b>${d.tuya && d.tuya !== 'No lo sé' ? ` · pusiste «${escaparDg(d.tuya)}»` : ''}</div>
+              </div>`).join('')}
+          </div>` : ''}
+      </div>
+
+      <button class="btn btn-primary" onclick="goTo('hoy')" style="width:100%;margin-top:12px">
+        VOLVER A HOY
+      </button>`;
+
+    caja.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    showXpPop(30);
+    pintarDiagnosticoHoy();
+    if (typeof loadStats === 'function') loadStats();
   } catch (e) {
     if (caja) caja.innerHTML = cajaError(e);
   }

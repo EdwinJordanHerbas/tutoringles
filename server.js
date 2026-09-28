@@ -706,9 +706,12 @@ app.post('/speaking-practice', async (req, res) => {
 // ════════════════════════════════════════════════════════
 app.get('/exam-attempts', async (req, res) => {
   try {
+    // Las notas de cada idioma van aparte: un ensayo del DALF no puede entrar
+    // en la media del Writing del Cambridge.
     const { rows } = await db(
-      'SELECT * FROM exam_attempts WHERE profile_id=$1 ORDER BY date DESC, created_at DESC LIMIT 30',
-      [PROFILE_ID]);
+      `SELECT * FROM exam_attempts WHERE profile_id=$1 AND lang=$2
+        ORDER BY date DESC, created_at DESC LIMIT 30`,
+      [PROFILE_ID, await idiomaDe(req)]);
     res.json(rows);
   } catch (e) { fallo(res, e); }
 });
@@ -716,11 +719,15 @@ app.get('/exam-attempts', async (req, res) => {
 app.post('/exam-attempts', async (req, res) => {
   const { date, section, score, max_score, notes } = req.body;
   if (!section || score === undefined) return res.status(400).json({ error: 'section y score requeridos' });
+  // Los simulacros que mandan aquí (Reading, Listening, Use of English) son
+  // todos del Cambridge: sin idioma explícito, la nota es del inglés aunque se
+  // hagan con el francés activo.
+  const lang = esIdioma(req.body.lang) ? req.body.lang : 'en';
   try {
     const { rows } = await db(
-      `INSERT INTO exam_attempts (profile_id, date, section, score, max_score, notes)
-       VALUES ($6,$1,$2,$3,$4,$5) RETURNING *`,
-      [date || todayStr(), section, score, max_score || 100, notes || '', PROFILE_ID]
+      `INSERT INTO exam_attempts (profile_id, date, section, score, max_score, notes, lang)
+       VALUES ($6,$1,$2,$3,$4,$5,$7) RETURNING *`,
+      [date || todayStr(), section, score, max_score || 100, notes || '', PROFILE_ID, lang]
     );
     res.json(rows[0]);
   } catch (e) { fallo(res, e); }
@@ -731,9 +738,9 @@ app.post('/exam-attempts', async (req, res) => {
 // ════════════════════════════════════════════════════════
 app.get('/stats', async (req, res) => {
   try {
-    // El vocabulario se cuenta del idioma activo, y los simulacros sólo existen
-    // para el inglés (Cambridge). En francés el nivel por destrezas sale en
-    // blanco, que es la verdad: no hay ninguna medición del DALF todavía.
+    // Todo del idioma activo: el vocabulario y también las notas. En francés,
+    // de momento sólo puede haber Writing (las tareas C1 del DALF, migración
+    // 29); el resto de destrezas sale en blanco, que es la verdad.
     const lang = await idiomaDe(req);
     const [xpQ, masteredQ, streakQ, sessWeekQ, examQ, sessTotalQ, wordsTotalQ, bestExamQ, examCfgQ, maxStreakQ] = await Promise.all([
       db("SELECT value FROM config WHERE key='xp_total'"),
@@ -745,21 +752,21 @@ app.get('/stats', async (req, res) => {
       db(`SELECT COUNT(*) AS cnt FROM study_sessions
           WHERE profile_id=$1 AND date >= $2::date - INTERVAL '7 days'`, [PROFILE_ID, todayStr()]),
       db(`SELECT section, AVG(score::float/max_score*100) AS avg_pct FROM exam_attempts
-          WHERE profile_id=$1 GROUP BY section`, [PROFILE_ID]),
+          WHERE profile_id=$1 AND lang=$2 GROUP BY section`, [PROFILE_ID, lang]),
       db('SELECT COUNT(*) AS cnt FROM study_sessions WHERE profile_id=$1', [PROFILE_ID]),
       db(`SELECT COUNT(*) AS cnt FROM user_words uw JOIN words w ON w.id = uw.word_id
           WHERE uw.profile_id=$1 AND w.lang=$2`, [PROFILE_ID, lang]),
       db(`SELECT MAX(score::float/max_score*100) AS best, COUNT(*) AS done FROM exam_attempts
-          WHERE profile_id=$1`, [PROFILE_ID]),
+          WHERE profile_id=$1 AND lang=$2`, [PROFILE_ID, lang]),
       db("SELECT value FROM config WHERE key='target_exam_date'"),
       db('SELECT MAX(streak) AS m FROM daily_goals WHERE profile_id=$1', [PROFILE_ID])
     ]);
 
     // Intentos por sección (hacen falta para saber si hay datos suficientes)
-    const { rows: attemptsBySection } = lang === 'en' ? await db(
+    const { rows: attemptsBySection } = await db(
       `SELECT section, COUNT(*)::int AS n, AVG(score::float/max_score*100) AS avg_pct
-         FROM exam_attempts WHERE profile_id=$1 GROUP BY section`, [PROFILE_ID]
-    ) : { rows: [] };
+         FROM exam_attempts WHERE profile_id=$1 AND lang=$2 GROUP BY section`, [PROFILE_ID, lang]
+    );
     // Vocabulario dominado por nivel CEFR
     const { rows: vocabByLevel } = await db(
       `SELECT w.level,
@@ -775,11 +782,11 @@ app.get('/stats', async (req, res) => {
     const sessTotal = parseInt(sessTotalQ.rows[0]?.cnt || '0', 10);
     const wordsTotal = parseInt(wordsTotalQ.rows[0]?.cnt || '0', 10);
     const ingles    = lang === 'en';
-    const examsDone = ingles ? parseInt(bestExamQ.rows[0]?.done || '0', 10) : 0;
-    const bestExam  = ingles && bestExamQ.rows[0]?.best != null ? Math.round(bestExamQ.rows[0].best) : null;
+    const examsDone = parseInt(bestExamQ.rows[0]?.done || '0', 10);
+    const bestExam  = bestExamQ.rows[0]?.best != null ? Math.round(bestExamQ.rows[0].best) : null;
     const streak_max = parseInt(maxStreakQ.rows[0]?.m || '0', 10);
     const exam_scores = {};
-    if (ingles) for (const r of examQ.rows) exam_scores[r.section] = Math.round(r.avg_pct);
+    for (const r of examQ.rows) exam_scores[r.section] = Math.round(r.avg_pct);
     // % de vocabulario dominado sobre el que se está estudiando
     const vocab_pct = wordsTotal > 0 ? Math.round((mastered / wordsTotal) * 100) : 0;
 
@@ -814,8 +821,15 @@ app.get('/stats', async (req, res) => {
       ? ORDER[Math.floor(withLevel.reduce((a, s) => a + ORDER.indexOf(s.level), 0) / withLevel.length)]
       : null;
 
+    // El nivel del test de ubicación del idioma, aparte del estimado por
+    // destrezas: son dos medidas distintas y mezclarlas escondería de dónde
+    // sale cada una. La cabecera usa éste cuando no hay destrezas medidas.
+    const claveTest = lang === 'fr' ? 'nivel_medido_fr' : 'nivel_medido';
+    const nivelTest = (await leerConfig([claveTest]))[claveTest] || null;
+
     res.json({
       idioma: lang,
+      nivel_test: nivelTest,
       xp_total: xp,
       streak, streak_max,
       words_mastered: mastered,
@@ -1030,6 +1044,64 @@ app.post('/diagnostico', async (req, res) => {
     await addXp(30);
 
     res.json({ total: detail.length, aciertos, pct, nivel, texto, porParte, detail });
+  } catch (e) { fallo(res, e); }
+});
+
+// ════════════════════════════════════════════════════════
+// TEST DE NIVEL DEL FRANCÉS
+// ════════════════════════════════════════════════════════
+// Otro test y otra escala: el del inglés mide cuánto falta para aprobar un C1,
+// éste UBICA (A2 → C1) a alguien que dice estar en A2. Preguntas, respuestas y
+// corrección en lib/test-frances.js; las respuestas no salen nunca de aquí.
+const testFrances = require('./lib/test-frances');
+
+const CLAVES_NIVEL_FR = ['nivel_medido_fr', 'nivel_medido_fr_pct', 'nivel_medido_fr_fecha'];
+
+// GET /diagnostico/fr — el test, sin respuestas
+app.get('/diagnostico/fr', async (req, res) => {
+  try {
+    const c = await leerConfig(CLAVES_NIVEL_FR);
+    res.json({
+      preguntas: testFrances.preguntasParaCliente(),
+      total: testFrances.PREGUNTAS.length,
+      ya_hecho: !!c.nivel_medido_fr,
+      nivel_medido: c.nivel_medido_fr || null,
+      pct: c.nivel_medido_fr_pct ? Number(c.nivel_medido_fr_pct) : null,
+      fecha: c.nivel_medido_fr_fecha || null,
+    });
+  } catch (e) { fallo(res, e); }
+});
+
+// POST /diagnostico/fr — corregir, ubicar y guardar
+app.post('/diagnostico/fr', async (req, res) => {
+  const answers = Array.isArray(req.body?.answers) ? req.body.answers : [];
+  if (!answers.length) return res.status(400).json({ error: 'answers requerido' });
+  try {
+    const r = testFrances.corregir(answers);
+    // Igual que el del inglés: el intento y el resumen en UNA transacción, el
+    // intento primero. Una medición a medias miente peor que ninguna.
+    const cli = await pool.connect();
+    try {
+      await cli.query('BEGIN');
+      await cli.query(
+        `INSERT INTO exam_attempts (profile_id, date, section, score, max_score, notes, lang)
+         VALUES ($1, $2, 'diag', $3, 100, $4, 'fr')`,
+        [PROFILE_ID, todayStr(), r.pct, `Test de nivel de francés · ${r.aciertos}/${r.total} · ${r.nivel}`]);
+      const guardar = (k, v) => cli.query(
+        `INSERT INTO config (key, value) VALUES ($1, $2)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [k, v]);
+      await guardar('nivel_medido_fr', r.nivel);
+      await guardar('nivel_medido_fr_pct', String(r.pct));
+      await guardar('nivel_medido_fr_fecha', todayStr());
+      await cli.query('COMMIT');
+    } catch (e) {
+      await cli.query('ROLLBACK').catch(() => {});
+      throw e;
+    } finally {
+      cli.release();
+    }
+    await addXp(30);
+    res.json(r);
   } catch (e) { fallo(res, e); }
 });
 
@@ -1318,10 +1390,14 @@ app.get('/listening/task/:slug', async (req, res) => {
 // ════════════════════════════════════════════════════════
 app.get('/writing/tasks', async (req, res) => {
   try {
+    // Del idioma activo, y de menos a más nivel: en francés van primero los
+    // correos que hacen falta el primer mes y al final el formato del DALF.
     const { rows } = await db(
       `SELECT t.*, (SELECT COUNT(*)::int FROM writing_submissions s
                      WHERE s.task_id = t.id AND s.profile_id = $1) AS attempts
-         FROM writing_tasks t ORDER BY t.part, t.id`, [PROFILE_ID]
+         FROM writing_tasks t
+        WHERE t.lang = $2
+        ORDER BY t.nivel, t.part, t.id`, [PROFILE_ID, await idiomaDe(req)]
     );
     res.json(rows);
   } catch (e) { fallo(res, e); }
@@ -1348,14 +1424,18 @@ app.post('/writing/submissions', async (req, res) => {
       [PROFILE_ID, task_id, body, words,
        content ?? null, achievement ?? null, organisation ?? null, language ?? null, notes || null]
     );
-    // Si se ha autopuntuado, cuenta como intento de la destreza
+    // Si se ha autopuntuado, cuenta como intento de la destreza — pero sólo
+    // si la tarea es de nivel de examen (C1). Un 18/20 en un correo de B1 a la
+    // régie no dice que escribas en C1, y contarlo haría que la cabecera se
+    // inventase un nivel. La nota va con el idioma de la tarea.
+    const { rows: [tarea] } = await db('SELECT lang, nivel FROM writing_tasks WHERE id=$1', [task_id]);
     const criterios = [content, achievement, organisation, language].filter((v) => v != null);
-    if (criterios.length === 4) {
+    if (criterios.length === 4 && tarea?.nivel === 'C1') {
       const total = criterios.reduce((a, b) => a + b, 0);
       await db(
-        `INSERT INTO exam_attempts (profile_id, date, section, score, max_score, notes)
-         VALUES ($1,$2,'writing',$3,20,$4)`,
-        [PROFILE_ID, todayStr(), total, `Writing · ${words} palabras`]
+        `INSERT INTO exam_attempts (profile_id, date, section, score, max_score, notes, lang)
+         VALUES ($1,$2,'writing',$3,20,$4,$5)`,
+        [PROFILE_ID, todayStr(), total, `Writing · ${words} palabras`, tarea.lang]
       );
     }
     await db(
@@ -1383,7 +1463,8 @@ app.get('/writing/submissions', async (req, res) => {
 // ════════════════════════════════════════════════════════
 app.get('/speaking/tasks', async (req, res) => {
   try {
-    const { rows } = await db('SELECT * FROM speaking_tasks ORDER BY part, id');
+    const { rows } = await db(
+      'SELECT * FROM speaking_tasks WHERE lang = $1 ORDER BY part, nivel, id', [await idiomaDe(req)]);
     res.json(rows);
   } catch (e) { fallo(res, e); }
 });
@@ -1751,7 +1832,7 @@ app.put('/idioma', async (req, res) => {
 // de una a otra cuando los datos lo dicen.
 app.get('/plan/fases', async (req, res) => {
   try {
-    const [pal, sit, gram] = await Promise.all([
+    const [pal, sit, gram, esc] = await Promise.all([
       db(`SELECT w.category, count(*)::int AS total,
                  count(*) FILTER (WHERE uw.stability >= 7)::int AS consolidadas,
                  count(*) FILTER (WHERE uw.reps > 0)::int AS vistas
@@ -1771,6 +1852,18 @@ app.get('/plan/fases', async (req, res) => {
             LEFT JOIN grammar_progress p ON p.topic_id = g.id AND p.profile_id = $1
            WHERE g.lang = 'fr'
            GROUP BY g.level`, [PROFILE_ID]),
+      // Tareas escritas: las prácticas cuentan con haberlas escrito una vez;
+      // las del DALF, sólo si además se han autoevaluado con los 4 criterios.
+      db(`SELECT (t.nivel = 'C1') AS dalf, count(*)::int AS total,
+                 count(*) FILTER (WHERE EXISTS (
+                   SELECT 1 FROM writing_submissions s
+                    WHERE s.task_id = t.id AND s.profile_id = $1
+                      AND (t.nivel <> 'C1' OR (s.content IS NOT NULL AND s.achievement IS NOT NULL
+                           AND s.organisation IS NOT NULL AND s.language IS NOT NULL))
+                 ))::int AS hechas
+            FROM writing_tasks t
+           WHERE t.lang = 'fr'
+           GROUP BY 1`, [PROFILE_ID]),
     ]);
     const porClave = (rows, clave) => Object.fromEntries(rows.map((r) => [r[clave], r]));
     const palabras = porClave(pal.rows, 'category');
@@ -1779,6 +1872,8 @@ app.get('/plan/fases', async (req, res) => {
         palabras,
         situaciones: porClave(sit.rows, 'level'),
         gramatica: porClave(gram.rows, 'level'),
+        correos: esc.rows.find((r) => !r.dalf),
+        dalf:    esc.rows.find((r) => r.dalf),
       }),
       vistas: pal.rows.reduce((a, r) => a + r.vistas, 0),
       total: pal.rows.reduce((a, r) => a + r.total, 0),

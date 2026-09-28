@@ -99,6 +99,7 @@ Docker: postgres:16                   ← base "tutoringles"
 | `lib/tetris.js` | Lógica del modo Tetris (día de estudio, reparto, veredicto) |
 | `lib/fases.js` | Fases del plan del francés |
 | `lib/idiomas.js` | Los dos idiomas |
+| `lib/test-frances.js` | Test de nivel del francés (A2 → C1) |
 | `src/js/progress.js` | Estadísticas y nivel estimado |
 
 ### Migraciones
@@ -131,6 +132,8 @@ docker exec -i postgres psql -U postgres -d tutoringles -v ON_ERROR_STOP=1 < mig
 | `migration_26_frances_situaciones.sql` | 12 situaciones de la Suiza romanda |
 | `migration_27_frances_gramatica.sql` | 8 lecciones de gramática francesa |
 | `migration_28_ingles_c1.sql` | 116 entradas más de inglés C1 |
+| `migration_29_escribir_y_oral_por_idioma.sql` | Idioma y nivel en tareas y notas |
+| `migration_30_frances_escribir_y_oral.sql` | Correos para Suiza, síntesis y ensayo del DALF, y el oral |
 
 **Ojo:** desde la 07, todo el progreso cuelga de `profile_id` y los índices únicos
 son compuestos. Cualquier `ON CONFLICT` nuevo debe nombrar las dos columnas

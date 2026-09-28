@@ -18,6 +18,8 @@ const vacio = {
   },
   situaciones: { A2: { total: 5, hechas: 0 }, B1: { total: 5, hechas: 0 }, B2: { total: 2, hechas: 0 } },
   gramatica:   { B1: { total: 4, hechas: 0 }, B2: { total: 3, hechas: 0 }, C1: { total: 1, hechas: 0 } },
+  correos:     { total: 5, hechas: 0 },
+  dalf:        { total: 4, hechas: 0 },
 };
 
 test('al empezar, la fase actual es la primera y ninguna está hecha', () => {
@@ -56,14 +58,38 @@ test('un objetivo sin contenido no se da por cumplido', () => {
   assert.strictEqual(f[0].objetivos[2].pct, 0);
 });
 
-test('los simulacros del DALF, que aún no existen, no cuentan en el porcentaje', () => {
+test('la comprensión del DALF, que aún no existe, no cuenta en el porcentaje', () => {
+  const d = structuredClone(vacio);
+  d.palabras.academic.consolidadas = 35;
+  d.gramatica.B2.hechas = 3;
+  d.gramatica.C1.hechas = 1;
+  d.dalf.hechas = 4;
+  const f = fasesFrances(d)[2];
+  assert.strictEqual(f.pct, 100);
+  assert.ok(f.objetivos.some((o) => o.pendienteApp));
+});
+
+test('la fase 3 no se cumple sin escribir las tareas del DALF', () => {
   const d = structuredClone(vacio);
   d.palabras.academic.consolidadas = 35;
   d.gramatica.B2.hechas = 3;
   d.gramatica.C1.hechas = 1;
   const f = fasesFrances(d)[2];
-  assert.strictEqual(f.pct, 100);
-  assert.ok(f.objetivos.some((o) => o.pendienteApp));
+  assert.ok(f.pct < 100);
+  const obj = f.objetivos.find((o) => /DALF escritos/.test(o.texto));
+  assert.deepStrictEqual([obj.hechas, obj.meta, obj.pct], [0, 4, 0]);
+});
+
+test('la fase 2 incluye escribir los correos del día a día', () => {
+  const d = structuredClone(vacio);
+  d.palabras.work.consolidadas = 55;
+  d.palabras.general.consolidadas = 35;
+  d.situaciones.B1.hechas = 5;
+  d.situaciones.B2.hechas = 2;
+  d.gramatica.B1.hechas = 4;
+  assert.ok(fasesFrances(d)[1].pct < 100, 'sin correos no está completa');
+  d.correos.hechas = 5;
+  assert.strictEqual(fasesFrances(d)[1].pct, 100);
 });
 
 test('sin datos no revienta', () => {

@@ -102,11 +102,14 @@ function renderSpeakSection() {
          la barra el 2-ago. Como sólo las cargaba exam.js, se quedaron
          inalcanzables sin que nadie lo notara: speaking_practice llevaba cero
          filas desde julio. Su sitio es éste, que es la pestaña de hablar.
-         Son del Cambridge: con el francés activo no se enseñan. -->
-    <div class="glass-card-accent" style="margin-top:8px;${frances ? 'display:none' : ''}">
-      <div class="card-title">LAS 4 PARTES DEL ORAL · C1</div>
+         El servidor da las del idioma activo: en francés, las de hablar de
+         ti (B1) y el exposé y el debate del DALF. -->
+    <div class="glass-card-accent" style="margin-top:8px">
+      <div class="card-title">${frances ? 'EL ORAL EN FRANCÉS' : 'LAS 4 PARTES DEL ORAL · C1'}</div>
       <p style="font-size:0.72rem;color:var(--text-3);margin-bottom:10px">
-        Con cronómetro para el minuto seguido. El examen es el 1 de diciembre.
+        ${frances
+          ? 'Con cronómetro y en alto. Primero, hablar de ti y contar lo que te pasa; al final, el exposé y el debate del DALF.'
+          : 'Con cronómetro para el minuto seguido.'}
       </p>
       <div id="speaking-tasks"><div class="empty-state" style="padding:8px 0"><div class="spinner"></div></div></div>
     </div>
@@ -128,10 +131,10 @@ function renderSpeakSection() {
   `;
 
   loadSpeakHistory();
-  if (frances) return;
-  cargarPronFrase();
   // Vive en writing.js (comparte pantalla con las tareas escritas del C1).
   if (typeof loadSpeakingTasks === 'function') loadSpeakingTasks();
+  // La figurada es del inglés.
+  if (!frances) cargarPronFrase();
 }
 
 /**
@@ -156,8 +159,8 @@ function speakTarjetasFrances() {
         Una hora de preparación con un dossier de documentos, y después unos
         30 minutos ante el tribunal: un <strong>exposé</strong> en el que presentas el
         tema y defiendes una postura, y un <strong>débat</strong> en el que te llevan la
-        contraria. Lo que puntúa: estructurar, argumentar y matizar. Las frases
-        C1 de arriba son exactamente eso.
+        contraria. Lo que puntúa: estructurar, argumentar y matizar. Tienes los
+        dos más abajo, con cronómetro.
       </div>
     </div>`;
 }

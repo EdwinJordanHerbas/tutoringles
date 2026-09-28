@@ -700,12 +700,16 @@ async function loadStats() {
     const stats = await apiGet('/stats');
     if (!stats) return;
     updateXpBar(stats.xp_total || 0);
-    // Sin datos suficientes no se inventa un nivel: se muestra un guion.
+    // Sin datos suficientes no se inventa un nivel: se muestra un guion. Si no
+    // hay destrezas medidas pero sí test de nivel, se enseña el del test, que
+    // también es una medición —y el título dice de dónde sale—.
     const lvl = document.getElementById('lvl-badge');
-    lvl.textContent = stats.estimated_level || '—';
+    lvl.textContent = stats.estimated_level || stats.nivel_test || '—';
     lvl.title = stats.estimated_level
       ? `Estimado a partir de ${stats.level_evidence} destreza(s) con datos`
-      : 'Aún no hay datos suficientes para estimar tu nivel';
+      : stats.nivel_test
+        ? 'Según el test de nivel (gramática y léxico, no cómo hablas)'
+        : 'Aún no hay datos suficientes para estimar tu nivel';
     if (stats.streak !== undefined) {
       _streak = stats.streak;
       document.getElementById('streak-count').innerHTML = `<img src="src/img/icons/streak.png" alt="" class="ico"> ${stats.streak}`;
@@ -726,18 +730,18 @@ function renderProgress() { if (typeof initProgress === 'function') initProgress
 // ESCRIBIR no tiene módulo propio: vive en writing.js, que hasta el 12-ago sólo
 // se cargaba desde dentro de SIMULACROS.
 function renderEscribir() {
-  // Las tareas de escritura son las del Cambridge. Con el francés activo se
-  // dice arriba, en vez de dejar que parezcan tareas de francés.
+  // Las tareas son las del idioma activo (el servidor filtra). En francés hay
+  // dos tipos, y se dice cuál es cuál: los correos que hacen falta en cuanto se
+  // llega a Suiza, y el formato del DALF C1, que es la fase 3.
+  const frances = _idioma === 'fr';
+  const tit = document.getElementById('escribir-tit');
+  const sub = document.getElementById('escribir-sub');
+  if (tit) tit.textContent = frances ? 'ESCRIBIR EN FRANCÉS' : 'LAS TAREAS DEL C1';
+  if (sub) sub.textContent = frances
+    ? 'Primero los correos de tu primer mes en Suiza (B1); al final, la síntesis y el ensayo del DALF C1. Te puntúas tú con los criterios del DALF.'
+    : 'Escribes tú y te puntúas con la rúbrica oficial de Cambridge.';
   const aviso = document.getElementById('escribir-aviso');
-  if (aviso) {
-    aviso.innerHTML = _idioma === 'fr' ? `
-      <div class="glass-card" style="margin-bottom:10px">
-        <div style="font-size:0.76rem;color:var(--text-2);line-height:1.55">
-          Estas tareas son del <b>Cambridge (inglés)</b>. Las del DALF C1 —síntesis
-          de documentos y ensayo argumentado— llegan con la fase 3 del francés.
-        </div>
-      </div>` : '';
-  }
+  if (aviso) aviso.innerHTML = '';
   if (typeof loadWritingTasks === 'function') loadWritingTasks();
 }
 function renderSettings() {
@@ -795,7 +799,7 @@ async function initApp() {
 
 // Se sube a mano en cada despliegue que cambie el frontend. Se ve en Ajustes,
 // para poder comprobar qué está corriendo el móvil sin adivinarlo.
-const APP_VERSION = 'v19 · 27-sep-2026';
+const APP_VERSION = 'v20 · 28-sep-2026';
 
 function pintarVersion() {
   const el = document.getElementById('version-app');

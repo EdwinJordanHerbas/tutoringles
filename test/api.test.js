@@ -132,3 +132,8 @@ test('el estado del día Tetris siempre dice qué toca', conAuth, async () => {
   assert.ok(['despertar', 'ronda', 'almohada', 'noche', 'hecho'].includes(t.fase), `fase desconocida: ${t.fase}`);
   assert.ok(t.resultados && typeof t.resultados.veredicto === 'string');
 });
+
+test('el test de nivel del francés nunca envía la respuesta correcta', conAuth, async () => {
+  const texto = await (await get('/diagnostico/fr')).text();
+  assert.ok(!texto.includes('"correcta"'), 'la respuesta del test de francés no puede salir del servidor');
+});
