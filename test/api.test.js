@@ -57,24 +57,33 @@ test('los datos exigen autenticación', async (t) => {
   assert.strictEqual(r.status, 401);
 });
 
-test('las tareas de Reading nunca exponen la respuesta correcta', conAuth, async () => {
-  const lista = await (await get('/reading/tasks')).json();
-  assert.ok(Array.isArray(lista) && lista.length, 'debería haber tareas de Reading');
-  for (const t of lista) {
-    const texto = await (await get(`/reading/task/${t.slug}`)).text();
-    assert.ok(!texto.includes('"answer"'),
-      `la tarea ${t.slug} está filtrando la respuesta al cliente`);
+// Las listas dan las del idioma activo, así que cada test dice de qué idioma
+// habla: sin `?lang=`, el resultado dependía de si se había dejado la app en
+// inglés o en francés.
+test('las tareas de Reading y Listening nunca exponen la respuesta correcta', conAuth, async () => {
+  for (const lang of ['en', 'fr']) {
+    const textos = await (await get(`/reading/tasks?lang=${lang}`)).json();
+    const audios = await (await get(`/listening/tasks?lang=${lang}`)).json();
+    if (lang === 'en') assert.ok(textos.length && audios.length, 'debería haber Reading y Listening del Cambridge');
+    for (const t of textos) {
+      const texto = await (await get(`/reading/task/${t.slug}`)).text();
+      assert.ok(!texto.includes('"answer"'), `el texto ${t.slug} está filtrando la respuesta al cliente`);
+    }
+    for (const t of audios) {
+      const texto = await (await get(`/listening/task/${t.slug}`)).text();
+      assert.ok(!texto.includes('"answer"'), `el audio ${t.slug} está filtrando la respuesta al cliente`);
+    }
   }
 });
 
 test('Reading suma las 26 preguntas del examen oficial', conAuth, async () => {
-  const lista = await (await get('/reading/tasks')).json();
+  const lista = await (await get('/reading/tasks?lang=en')).json();
   const total = lista.reduce((a, t) => a + t.questions, 0);
   assert.strictEqual(total, 26, `Reading (partes 5-8) son 26 preguntas, hay ${total}`);
 });
 
 test('Listening suma las 30 preguntas del examen oficial', conAuth, async () => {
-  const lista = await (await get('/listening/tasks')).json();
+  const lista = await (await get('/listening/tasks?lang=en')).json();
   const total = lista.reduce((a, t) => a + t.questions, 0);
   assert.strictEqual(total, 30, `Listening son 30 preguntas, hay ${total}`);
 });
