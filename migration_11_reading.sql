@@ -53,8 +53,14 @@ BEGIN
 END $$;
 
 -- Regenerar contenido de Reading para poder reejecutar la migración
-DELETE FROM exam_questions WHERE part IN ('reading_mc','cross_text','gapped_text','multi_match');
-DELETE FROM exam_texts     WHERE part IN ('reading_mc','cross_text','gapped_text','multi_match');
+-- Sólo lo del Cambridge. Desde la migración 32 hay textos de francés en las
+-- mismas tablas (slug 'fr-r-…') y un DELETE por tipo de pregunta se los llevaba
+-- al reaplicar esta. Se filtra por el slug y no por `lang` porque esa columna
+-- no existe todavía cuando esta migración corre en una base nueva.
+DELETE FROM exam_questions WHERE part IN ('reading_mc','cross_text','gapped_text','multi_match')
+   AND (text_id IS NULL OR text_id NOT IN (SELECT id FROM exam_texts WHERE slug LIKE 'fr-%'));
+DELETE FROM exam_texts     WHERE part IN ('reading_mc','cross_text','gapped_text','multi_match')
+   AND slug NOT LIKE 'fr-%';
 
 -- ══════════════════════ PARTE 5 · MULTIPLE CHOICE ══════════════════════
 INSERT INTO exam_texts (slug, part, title, intro, body) VALUES
