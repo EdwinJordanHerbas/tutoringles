@@ -8,7 +8,9 @@ App para aprender **inglés y francés** enfocada al día a día por sector (emp
 Suiza en torno a un mes. Francés A2 (entiende mucho, no consigue explicarse), inglés B1. Ver
 "Dos idiomas y modo Tetris" más abajo.
 
-**En producción** desde el 20-jul-2026 en `https://tutoringles.tinafusion.com`.
+**En producción** desde el 20-jul-2026. Hasta el 29-sep-2026 vivió en un droplet
+(`tutoringles.tinafusion.com`); el droplet ya no existe y ahora va en **Render + Neon, los dos
+gratis** (ver "Despliegue").
 
 ## Stack
 
@@ -23,6 +25,7 @@ Suiza en torno a un mes. Francés A2 (entiende mucho, no consigue explicarse), i
 | Comando | Qué hace |
 |---|---|
 | `npm start` | `node server.js` |
+| `npm run migrate` | `tools/migrar.js`: aplica las migraciones que falten y carga el diccionario |
 | `npm test` | `node --test` — tests nativos de Node (126, de los que 13 se saltan sin servidor) |
 | `npm run test:fsrs` | tests del algoritmo de repetición espaciada |
 | `node tools/generar-lexico.js` | regenera el diccionario de pronunciación |
@@ -175,10 +178,13 @@ era que nada recordaba que la app existe y que al abrirla había que decidir por
   (`#sec-hoy.en-sesion`): cada elemento en pantalla es una decisión posible.
 - La meta diaria bajó de 20 palabras a 8. La clave es `daily_vocab_target` (no crear otra).
 
-**Las claves VAPID no van al repo.** Se leen de `VAPID_PUBLIC`/`VAPID_PRIVATE` o de un
-`vapid.json` junto al servidor (gitignored, ya desplegado en el droplet con permisos 600). Se
-admite el fichero porque el contenedor se levantó con `docker run` sin compose, y recrearlo solo
-para añadir dos variables no compensa el riesgo. Para regenerarlas:
+**Las claves VAPID no van al repo.** Se buscan, por orden, en `VAPID_PUBLIC`/`VAPID_PRIVATE`,
+en un `vapid.json` junto al servidor (gitignored; era el caso del droplet) y en la base
+(`config.vapid_publica`/`vapid_privada`). Si no están en ningún sitio, `prepararVapid()` las
+**genera una vez y las guarda en la base**: en Render el disco se borra en cada despliegue, y unas
+claves nuevas en cada arranque invalidarían todas las suscripciones. Esas dos claves de `config`
+están vetadas en `GET/PUT /config/:key` (`CONFIG_RESERVADA`): la privada firma los envíos.
+Para regenerarlas a mano:
 `node -e "console.log(JSON.stringify(require('web-push').generateVAPIDKeys()))"` — ojo, cambiarlas
 invalida las suscripciones existentes.
 
@@ -514,8 +520,9 @@ el 30-jul; la tabla venía de la migración 16 y se quedó con el criterio viejo
 
 ## Base de datos
 
-Postgres en el droplet, base `tutoringles` con usuario propio. Esquema por **migraciones
-acumulativas idempotentes**, que se aplican a mano y en orden:
+Postgres en **Neon** (gratis). Esquema por **migraciones acumulativas idempotentes**, en este
+orden, que aplica solo `tools/migrar.js` en cada arranque (lleva la cuenta en la tabla
+`migraciones`):
 
 `migration.sql` (base) → `_02` backfill de user_words → `_03` gramática y vocabulario →
 `_04` motor (exam_questions + currículo de 30 días) → `_05` banco de 120 palabras →
@@ -529,37 +536,46 @@ Tetris → `_25` vocabulario de francés (217, **el orden de las filas es el ord
 `_29` idioma y nivel en escribir, el oral y las notas → `_30` tareas de escribir y del oral en francés →
 `_31` comprensión por idioma y Cambridge sin fecha → `_32` comprensión oral y escrita en francés.
 
-**Ojo: las tablas son de `postgres`, no del usuario `tutoringles`.** Cualquier migración con
-`ALTER TABLE` hay que aplicarla con `-U postgres` o responde `must be owner of table`. La
-transacción entera hace rollback, así que no deja nada a medias, pero se pierde el viaje.
+**Una migración nueva se llama `migration_NN_algo.sql`** (NN = siguiente número) y trae su
+propio `BEGIN`/`COMMIT`. `migrar.js` las ordena por ese número; si una falla, hace rollback,
+sale con error y **la app no arranca** — mejor eso que arrancar con el esquema a medias.
+
+**Los `GRANT … TO "tutoringles"`** son del droplet, donde las tablas eran de `postgres` y la app
+entraba con otro usuario. En Neon la app entra con el dueño de la base y no hacen falta, pero un
+GRANT a un rol que no existe tumba la migración entera: `migrar.js` crea ese rol sin login y, si
+no tiene permiso para ello, quita esas líneas antes de aplicar.
 
 **La `_20` la GENERA `tools/cortar-pares.js`, no se escribe a mano**: sus `audio_ok` salen de
 medir los ficheros, así que hay que rehacerla cada vez que se regenere el audio.
 
-Tras aplicar la `_16` hay que cargar el diccionario, que no va dentro del SQL:
-```
-scp data/lexicon.tsv droplet:/tmp/
-ssh droplet 'docker exec -i postgres psql -U postgres -d tutoringles \
-  -c "\copy lexicon(word,ipa,fuente) FROM STDIN" < /tmp/lexicon.tsv'
-```
-
-Se aplican con:
-```
-docker exec -i postgres psql -U tutoringles -d tutoringles < migration_XX.sql
-```
+**El diccionario no va dentro del SQL.** `tools/generar-lexico.js` lo genera en el build de
+Render y `migrar.js` lo carga en `lexicon` la primera vez que la encuentra vacía (~147.000 filas,
+por tandas de 5.000). En local, igual: `npm run lexico && npm run migrate`.
 
 ## Despliegue
 
-Contenedor Docker `tutoringles` en el droplet. **El push no despliega.** Hay que hacer:
+**Render (web, gratis) + Neon (Postgres, gratis)** desde el 29-sep-2026. Todo está en
+`render.yaml`: Render → New → Blueprint → este repo, y pide `DATABASE_URL` (la de Neon) y
+`APP_TOKEN`. **Cada push a `main` despliega solo** (`autoDeploy`).
 
-```
-ssh droplet "cd /opt/tutoringles && git pull && docker restart tutoringles"
-```
+- **Build:** `npm install` + `generar-lexico.js`. **Arranque:** `migrar.js` y luego `server.js`.
+- **Render gratis duerme la app a los 15 minutos sin tráfico**, y dormida no corre el
+  planificador: no saldrían los avisos, que es lo que hace que la app se abra. Por eso existe
+  `.github/workflows/despierta.yml`, que llama a `/ping` cada 10 minutos (gratis: el repo es
+  público). Se activa con la variable del repo `TUTOR_URL`. GitHub apaga los cron de un repo sin
+  commits en 60 días: si los avisos dejan de llegar, mirar primero ahí.
+- **`/ping` no toca la base, y `/health` sí.** Si el keep-alive consultara Neon cada 10 minutos,
+  Neon no se dormiría nunca y se gastarían sus horas de cómputo gratuitas. Por lo mismo el
+  planificador guarda la configuración de avisos una hora en memoria (`configAvisos()`), en vez
+  de leerla de la base cada minuto; cambiarla por la API invalida esa copia.
+- **El disco de Render se borra en cada despliegue.** Nada que haya que conservar puede vivir en
+  un fichero: por eso las claves VAPID van a la base.
+- El primer arranque tras un rato dormido tarda ~1 minuto (Render) + ~1 s (Neon despertando).
 
-Si el `git pull` se bloquea por un `package-lock.json` sin trackear, borrarlo antes en el droplet.
+`deploy.sh` es del droplet y ya no sirve.
 
 ## Límite real del servidor
 
-El droplet tiene ~1 GB de RAM libre y lo comparte con OkiroSport y n8n. **No proponer
-self-hostear modelos** (ya se descartó wav2vec2 por esto). Para pronunciación se usa Azure en
-capa gratuita F0. Detalle en las fichas `tutoringles-proyecto` y `tutoringles-deployment`.
+Render gratis da 512 MB de RAM y 0,1 CPU. **No proponer self-hostear modelos** (ya se descartó
+wav2vec2 en el droplet por falta de RAM, y aquí hay menos). Para pronunciación se usa Azure en
+capa gratuita F0.

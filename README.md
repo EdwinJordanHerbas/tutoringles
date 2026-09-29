@@ -65,19 +65,18 @@ su lote de vocabulario, su foco de gramática y su tarea de speaking.
 ```
 Navegador (PWA)
    │  HTTPS
-nginx (Certbot/Let's Encrypt)
-   │  proxy_pass 127.0.0.1:3401
-Docker: tutoringles (node:20-alpine)  ← Express, server.js
-   │
-Docker: postgres:16                   ← base "tutoringles"
+Render (web service gratis)   ← Express, server.js
+   │  TLS
+Neon (Postgres gratis)        ← base de la app
+
+GitHub Actions (despierta.yml) → /ping cada 10 min, para que Render no la duerma
 ```
 
 - **Backend:** Node 18+ / Express / `pg`. API en `server.js`, lógica de repaso en `lib/`.
 - **Frontend:** PWA vanilla, sin framework. `index.html` + `src/js/*` + `src/css/*`.
 - **Auth:** clave única (`APP_TOKEN`) por cabecera `Authorization: Bearer` o `?token=`.
   Sin `APP_TOKEN` la API queda abierta (modo desarrollo).
-- **Host:** droplet DigitalOcean (Ámsterdam), compartido con n8n y otros servicios.
-  UFW abre solo 22/80/443; Postgres nunca se expone a internet.
+- **Host:** Render + Neon, los dos en plan gratuito (hasta el 29-sep-2026, un droplet).
 
 ## Estructura
 
@@ -105,9 +104,11 @@ Docker: postgres:16                   ← base "tutoringles"
 ### Migraciones
 
 Se aplican en orden. Todas son idempotentes: se pueden reejecutar sin romper nada.
+`tools/migrar.js` aplica las que falten (lleva la cuenta en la tabla `migraciones`)
+y carga el diccionario de pronunciación si está vacío. En Render corre en cada arranque.
 
 ```bash
-docker exec -i postgres psql -U postgres -d tutoringles -v ON_ERROR_STOP=1 < migration_XX.sql
+DATABASE_URL=postgres://… npm run migrate
 ```
 
 | Migración | Contenido |
@@ -148,8 +149,9 @@ son compuestos. Cualquier `ON CONFLICT` nuevo debe nombrar las dos columnas
 ```bash
 npm install
 createdb -U odoo tutoringles
-psql -U odoo -d tutoringles -f migration.sql   # y el resto en orden
-iniciar-local.cmd                              # o: npm start
+npm run lexico                                                   # diccionario (una vez)
+DATABASE_URL=postgres://odoo@localhost/tutoringles npm run migrate
+iniciar-local.cmd                                                # o: npm start
 ```
 
 Sin base de datos: abre `http://localhost:3400?mock=1`.
@@ -159,7 +161,7 @@ Sin base de datos: abre `http://localhost:3400?mock=1`.
 ```bash
 npm test        # unitarios; los de API se saltan solos si no hay servidor
 
-TUTOR_URL=https://tutoringles.tinafusion.com TUTOR_TOKEN=xxx npm test   # incluye la API
+TUTOR_URL=https://tutoringles.onrender.com TUTOR_TOKEN=xxx npm test   # incluye la API
 ```
 
 Los tests de FSRS no comprueban números concretos —eso solo verificaría que la
@@ -173,24 +175,24 @@ número de preguntas del examen real.
 
 ## Despliegue
 
-```bash
-scp <archivos> droplet:/opt/tutoringles/...
-ssh droplet 'docker restart tutoringles'
-```
+Todo está en `render.yaml`. **Cada push a `main` despliega solo.**
 
-`/opt/tutoringles` está montado dentro del contenedor en `/app`.
+Primera vez:
 
-**Cuidado con el orden:** si un cambio añade un archivo nuevo que `server.js`
-requiere (por ejemplo `lib/`), hay que subir ese archivo **antes** que
-`server.js`, o el contenedor arranca roto.
+1. **Neon** (neon.tech) → crear proyecto (región Frankfurt) → copiar la
+   *connection string* (`postgresql://…?sslmode=require`).
+2. **Render** (render.com) → New → **Blueprint** → este repo. Pide dos valores:
+   `DATABASE_URL` (la de Neon) y `APP_TOKEN` (la clave para entrar en la app).
+   El primer arranque aplica las 32 migraciones y carga el diccionario.
+3. **GitHub** → Settings → Secrets and variables → Actions → **Variables** →
+   `TUTOR_URL` = la URL de Render, sin barra final. Activa el keep-alive
+   (`.github/workflows/despierta.yml`): sin él, Render gratis duerme la app a
+   los 15 minutos y no salen los avisos.
 
-Al crear tablas nuevas como `postgres`, hay que dar permisos al usuario de la
-app o responderá `permission denied for table X`:
+Las claves VAPID de los avisos se generan solas la primera vez y se guardan en
+la base (el disco de Render se borra en cada despliegue).
 
-```sql
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "tutoringles";
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "tutoringles";
-```
+`deploy.sh` es del droplet y ya no sirve.
 
 ---
 

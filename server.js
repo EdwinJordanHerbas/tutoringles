@@ -25,7 +25,8 @@ app.use(express.static(__dirname, {
 }));
 
 // ── CORS ─────────────────────────────────────────────────
-const PROD_ORIGIN = process.env.ALLOWED_ORIGIN || 'https://tutoringles.example.com';
+// En Render la URL pública llega sola en RENDER_EXTERNAL_URL.
+const PROD_ORIGIN = process.env.ALLOWED_ORIGIN || process.env.RENDER_EXTERNAL_URL || 'https://tutoringles.example.com';
 app.use((req, res, next) => {
   const origin = req.headers.origin || '';
   const isDev  = process.env.NODE_ENV === 'development' || /^https?:\/\/localhost(:\d+)?$/.test(origin);
@@ -55,7 +56,7 @@ function tokenValido(recibido) {
 const tokenDe = (req) =>
   (req.headers.authorization || '').replace('Bearer ', '') || req.query.token || '';
 
-const PUBLIC_PATHS = [/^\/health$/, /^\/auth\/check$/];
+const PUBLIC_PATHS = [/^\/health$/, /^\/ping$/, /^\/auth\/check$/];
 app.use((req, res, next) => {
   if (!APP_TOKEN) return next();
   if (PUBLIC_PATHS.some(r => r.test(req.path))) return next();
@@ -188,12 +189,44 @@ function leerVapid() {
   }
 }
 
-const { publica: VAPID_PUBLIC, privada: VAPID_PRIVATE } = leerVapid();
-avisos.configurar({
-  publica:  VAPID_PUBLIC,
-  privada:  VAPID_PRIVATE,
-  contacto: process.env.VAPID_CONTACT || 'mailto:ejordanherbas@gmail.com',
-});
+let { publica: VAPID_PUBLIC, privada: VAPID_PRIVATE } = leerVapid();
+
+/**
+ * Si no hay claves ni en el entorno ni en vapid.json, se guardan en la base y,
+ * la primera vez, se generan.
+ *
+ * Existe por Render (29-sep-2026): su disco se borra en cada despliegue, así
+ * que un vapid.json se perdería, y con él todas las suscripciones —cambiar las
+ * claves invalida las que hay—. En la base duran lo que dure la base. Se leen
+ * con `ON CONFLICT DO NOTHING` y se vuelven a leer: si dos arranques coinciden,
+ * gana uno y los dos acaban con las mismas.
+ *
+ * Nunca salen por la API: GET /config/:key rechaza las claves `vapid_*`.
+ */
+async function prepararVapid() {
+  if (!VAPID_PUBLIC || !VAPID_PRIVATE) {
+    try {
+      const leer = () => leerConfig(['vapid_publica', 'vapid_privada']);
+      let c = await leer();
+      if (!c.vapid_publica || !c.vapid_privada) {
+        const k = require('web-push').generateVAPIDKeys();
+        await db(`INSERT INTO config (key, value) VALUES ('vapid_publica', $1), ('vapid_privada', $2)
+                  ON CONFLICT (key) DO NOTHING`, [k.publicKey, k.privateKey]);
+        c = await leer();
+        console.log('· Avisos:   claves VAPID nuevas generadas y guardadas en la base');
+      }
+      VAPID_PUBLIC = c.vapid_publica;
+      VAPID_PRIVATE = c.vapid_privada;
+    } catch (e) {
+      console.error('[avisos] no se pudieron preparar las claves VAPID:', e?.message || e);
+    }
+  }
+  avisos.configurar({
+    publica:  VAPID_PUBLIC,
+    privada:  VAPID_PRIVATE,
+    contacto: process.env.VAPID_CONTACT || 'mailto:ejordanherbas@gmail.com',
+  });
+}
 
 // Caché en memoria de palabra → { ipa, nota }. El contenido de la app tiene
 // 843 palabras distintas, así que se llena entera enseguida y ahorra una
@@ -248,6 +281,12 @@ async function conFigurada(filas, campo, destino = 'pron') {
 }
 
 // ── HEALTH ───────────────────────────────────────────────
+// Para mantener despierta la app en un hosting que la duerme sin tráfico
+// (Render gratis, a los 15 minutos). No toca la base a propósito: si /health
+// la consultara cada 10 minutos, Neon tampoco se dormiría nunca y se gastarían
+// las horas de cómputo gratuitas.
+app.get('/ping', (req, res) => res.json({ ok: true }));
+
 app.get('/health', async (req, res) => {
   try {
     await db('SELECT 1');
@@ -851,7 +890,14 @@ app.get('/stats', async (req, res) => {
 // ════════════════════════════════════════════════════════
 // CONFIG
 // ════════════════════════════════════════════════════════
+// Las claves VAPID viven en config desde que la app está en Render (ver
+// prepararVapid). La privada firma los avisos: por esta puerta genérica no se
+// lee ni se escribe. Cambiarla desde fuera, además, dejaría sin avisos a todos
+// los móviles suscritos.
+const CONFIG_RESERVADA = /^vapid_/;
+
 app.get('/config/:key', async (req, res) => {
+  if (CONFIG_RESERVADA.test(req.params.key)) return res.status(403).json({ error: 'Clave reservada' });
   try {
     const { rows } = await db('SELECT * FROM config WHERE key=$1', [req.params.key]);
     if (!rows.length) return res.json({ key: req.params.key, value: null });
@@ -862,12 +908,14 @@ app.get('/config/:key', async (req, res) => {
 app.put('/config/:key', async (req, res) => {
   const { value } = req.body;
   if (value === undefined) return res.status(400).json({ error: 'value requerido' });
+  if (CONFIG_RESERVADA.test(req.params.key)) return res.status(403).json({ error: 'Clave reservada' });
   try {
     const { rows } = await db(
       `INSERT INTO config (key, value) VALUES ($1,$2)
        ON CONFLICT (key) DO UPDATE SET value=$2 RETURNING *`,
       [req.params.key, String(value)]
     );
+    olvidarConfigAvisos();       // por si era una hora de aviso
     res.json(rows[0]);
   } catch (e) { fallo(res, e); }
 });
@@ -2288,6 +2336,7 @@ app.put('/push/hora', async (req, res) => {
   }
   try {
     await db("INSERT INTO config (key,value) VALUES ('push_hora',$1) ON CONFLICT (key) DO UPDATE SET value=$1", [hora]);
+    olvidarConfigAvisos();
     res.json({ ok: true, hora });
   } catch (e) { fallo(res, e); }
 });
@@ -2363,6 +2412,25 @@ function registrarAviso(fecha, titulo, cuerpo, enviados, tipo = 'diario') {
 // el INSERT del candado; ahora que el candado se pone al final, hace falta.
 let _avisoEnCurso = false;
 
+// Las horas de los avisos, en memoria. El planificador mira cada minuto si toca
+// avisar, y leerlas de la base cada minuto tenía a Neon despierto las 24 horas
+// (se duerme a los 5 minutos sin consultas), gastando las horas de cómputo
+// gratuitas sin hacer nada. Se releen cada hora, y al momento cuando se cambian
+// desde la app (PUT /config/:key y PUT /push/hora llaman a olvidarConfigAvisos):
+// hay un solo proceso, así que la caché no se queda vieja.
+let _cfgAvisos = null;
+let _cfgAvisosLeida = 0;
+const CFG_AVISOS_TTL = 60 * 60_000;
+
+async function configAvisos() {
+  if (!_cfgAvisos || Date.now() - _cfgAvisosLeida > CFG_AVISOS_TTL) {
+    _cfgAvisos = await leerConfig(['push_hora', 'tetris_activo', 'tetris_hora_manana', 'tetris_hora_almohada']);
+    _cfgAvisosLeida = Date.now();
+  }
+  return _cfgAvisos;
+}
+function olvidarConfigAvisos() { _cfgAvisos = null; }
+
 function arrancarPlanificador() {
   if (!avisos.estaConfigurado()) {
     console.log('· Avisos:   SIN CLAVES — pon VAPID_PUBLIC/VAPID_PRIVATE o un vapid.json');
@@ -2373,7 +2441,7 @@ function arrancarPlanificador() {
     if (_avisoEnCurso) return;
     _avisoEnCurso = true;
     try {
-      const cfg = await leerConfig(['push_hora', 'tetris_activo', 'tetris_hora_manana', 'tetris_hora_almohada']);
+      const cfg = await configAvisos();
       if (avisos.tocaAvisar(cfg.push_hora || '20:30')) await avisoDiario();
       // Los dos del modo Tetris. Cada uno con su propio candado en push_log
       // (tipo distinto), así que ninguno tapa al otro ni al diario.
@@ -2472,5 +2540,7 @@ app.listen(PORT, () => {
   console.log(`· Auth:     ${APP_TOKEN ? 'ACTIVADA (APP_TOKEN)' : 'DESACTIVADA — define APP_TOKEN en producción'}`);
   console.log(`· Usuario:  ${APP_USER_NAME}`);
   console.log(`· DB:       ${process.env.DATABASE_URL ? 'DATABASE_URL configurada' : 'SIN DATABASE_URL'}`);
-  arrancarPlanificador();
+  // Las claves pueden venir de la base, así que se esperan antes de arrancar
+  // los avisos. Sin base, prepararVapid lo registra y se sigue sin avisos.
+  prepararVapid().then(arrancarPlanificador);
 });

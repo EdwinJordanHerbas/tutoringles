@@ -1,0 +1,27 @@
+# TutorIngles en Render (plan gratuito) con la base en Neon.
+# Render → New → Blueprint → este repo. Pide dos valores (sync: false):
+#   DATABASE_URL — la cadena de conexión de Neon (con ?sslmode=require)
+#   APP_TOKEN    — la clave con la que se entra en la app
+#
+# En cada build se regenera el diccionario de pronunciación (no va al repo) y
+# en cada arranque tools/migrar.js aplica las migraciones que falten y carga el
+# diccionario si la tabla está vacía. Si una migración falla, la app no arranca.
+services:
+  - type: web
+    name: tutoringles
+    runtime: node
+    plan: free
+    region: frankfurt
+    branch: main
+    buildCommand: npm install --omit=dev && node tools/generar-lexico.js
+    startCommand: node tools/migrar.js && node server.js
+    # /ping no toca la base: Neon puede dormirse aunque Render esté despierto.
+    healthCheckPath: /ping
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: DATABASE_URL
+        sync: false
+      - key: APP_TOKEN
+        sync: false

@@ -1,0 +1,36 @@
+# Mantiene despierta la app en Render gratis, que la duerme a los 15 minutos
+# sin tráfico. Dormida no corre el planificador y no salen los avisos (el
+# diario, el de la almohada y el del despertar), que es lo que hace que la app
+# se abra.
+#
+# Llama a /ping, que no toca la base: así Neon sí puede dormirse y no se gastan
+# sus horas de cómputo gratuitas.
+#
+# Se activa creando la variable del repo TUTOR_URL (Settings → Secrets and
+# variables → Actions → Variables) con la URL de Render, sin barra final.
+# Sin ella, el job no hace nada.
+#
+# El cron de GitHub no es puntual (puede retrasarse bastante en horas de
+# carga); por eso va cada 10 minutos y no cada 14.
+
+name: despierta
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    if: ${{ vars.TUTOR_URL != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: ping
+        env:
+          URL: ${{ vars.TUTOR_URL }}
+        # Un arranque en frío de Render tarda hasta un minuto: de ahí el
+        # --max-time largo y los reintentos.
+        run: curl -fsS --max-time 90 --retry 3 --retry-delay 10 "$URL/ping"
