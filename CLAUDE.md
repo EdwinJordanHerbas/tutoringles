@@ -554,16 +554,32 @@ por tandas de 5.000). En local, igual: `npm run lexico && npm run migrate`.
 
 ## Despliegue
 
-**Render (web, gratis) + Neon (Postgres, gratis)** desde el 29-sep-2026. Todo está en
-`render.yaml`: Render → New → Blueprint → este repo, y pide `DATABASE_URL` (la de Neon) y
-`APP_TOKEN`. **Cada push a `main` despliega solo** (`autoDeploy`).
+**Render (web, gratis) + Neon (Postgres, gratis)** desde el 29-sep-2026, en
+**https://tutoringles.onrender.com**. **Cada push a `main` despliega solo** (`autoDeploy`).
+
+- Render: servicio `tutoringles` (`srv-datv1ljbc2fs73doiu0g`, Frankfurt). Se creó con el
+  conector de Render, no con el Blueprint: `render.yaml` describe la misma configuración y sirve
+  para rehacerlo desde cero (New → Blueprint), pero **el servicio no lee ese fichero**; un cambio
+  ahí no cambia nada en Render.
+- Neon: proyecto `quiet-cake-82581645` (Frankfurt, base `neondb`). `DATABASE_URL` es la conexión
+  **directa** (sin `-pooler`) y con `sslmode=verify-full`, que es lo que `pg` ya hacía con
+  `require` pero sin el aviso de seguridad en cada arranque. En la cuenta hay otros dos proyectos
+  `tutoringles` vacíos, creados por error el mismo día.
+- Desde el entorno de Claude Code en la nube no se llega a Neon (el puerto 5432 está cerrado): la
+  base se toca con el conector de Neon (`run_sql`) o desde Render.
 
 - **Build:** `npm install` + `generar-lexico.js`. **Arranque:** `migrar.js` y luego `server.js`.
 - **Render gratis duerme la app a los 15 minutos sin tráfico**, y dormida no corre el
   planificador: no saldrían los avisos, que es lo que hace que la app se abra. Por eso existe
   `.github/workflows/despierta.yml`, que llama a `/ping` cada 10 minutos (gratis: el repo es
-  público). Se activa con la variable del repo `TUTOR_URL`. GitHub apaga los cron de un repo sin
-  commits en 60 días: si los avisos dejan de llegar, mirar primero ahí.
+  público). GitHub apaga los cron de un repo sin commits en 60 días: si los avisos dejan de
+  llegar, mirar primero ahí.
+- **El keep-alive va sólo de 05:00 a 22:59 UTC** (07:00-01:00 en verano en Suiza). Las 750 horas
+  gratis de Render son **por cuenta**, y en la misma cuenta vive otro servicio gratis
+  (`n8n-neumorstudio`): esta app despierta 24 h se comería 744 y a final de mes Render
+  suspendería las dos. La franja cubre los tres avisos; **un aviso puesto fuera de ella no
+  sale**. De noche no hace falta: el modo noche lleva la cuenta de las pistas en el
+  móvil y la manda cuando puede (`ncInformar` reintenta), así que si Render duerme no se pierde.
 - **`/ping` no toca la base, y `/health` sí.** Si el keep-alive consultara Neon cada 10 minutos,
   Neon no se dormiría nunca y se gastarían sus horas de cómputo gratuitas. Por lo mismo el
   planificador guarda la configuración de avisos una hora en memoria (`configAvisos()`), en vez
