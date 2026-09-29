@@ -5,8 +5,9 @@
 //   node tools/generar-lexico.js
 //
 // Deja el resultado en data/lexicon.tsv (word · ipa · fuente). Ese fichero NO
-// va al repo: pesa varios MB y se puede regenerar en cualquier momento. Se sube
-// al droplet y se carga en la tabla `lexicon` (ver migration_16).
+// va al repo: pesa varios MB y se puede regenerar en cualquier momento. Render
+// lo genera en cada build y tools/migrar.js lo carga en la tabla `lexicon`
+// (ver migration_16) la primera vez que la encuentra vacía.
 //
 // Dos fuentes, en este orden:
 //   1. ipa-dict en_UK — británico auténtico, pero solo 65.119 entradas y le
@@ -80,10 +81,7 @@ async function main() {
   console.log(`  ${uk.size} británicas directas`);
   console.log(`  ${convertidas} convertidas del americano`);
   console.log(`\nescrito en ${SALIDA} (${(tsv.length / 1e6).toFixed(1)} MB)`);
-  console.log('\nPara cargarlo en el droplet:');
-  console.log('  scp data/lexicon.tsv droplet:/tmp/');
-  console.log('  ssh droplet "docker exec -i postgres psql -U postgres -d tutoringles \\');
-  console.log('    -c \\"\\\\copy lexicon(word,ipa,fuente) FROM STDIN\\" < /tmp/lexicon.tsv"');
+  console.log('\nSe carga en la tabla `lexicon` con: node tools/migrar.js (sólo si está vacía)');
 }
 
 main().catch((e) => { console.error('ERROR:', e.message); process.exit(1); });

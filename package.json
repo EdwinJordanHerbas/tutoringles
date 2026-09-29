@@ -5,6 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "migrate": "node tools/migrar.js",
+    "lexico": "node tools/generar-lexico.js",
     "test": "node --test",
     "test:fsrs": "node --test test/fsrs.test.js"
   },

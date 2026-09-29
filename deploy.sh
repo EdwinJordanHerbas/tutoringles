@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # TutorIngles — despliegue en producción
 #
+# OBSOLETO desde el 29-sep-2026: el droplet ya no existe. La app va en Render +
+# Neon y se despliega sola con cada push a main (ver render.yaml). Se conserva
+# sólo como referencia.
+#
 # Uso (desde el droplet):  bash /opt/tutoringles/deploy.sh
 #
 # /opt/tutoringles está montado dentro del contenedor en /app, así que basta
