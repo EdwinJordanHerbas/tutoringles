@@ -27,10 +27,17 @@ function renderProgressDashboard(stats) {
   const levelColors = { A2: 'var(--level-a2)', B1: 'var(--level-b1)', B2: 'var(--level-b2)', C1: 'var(--level-c1)' };
   // Sin nivel demostrado, el roadmap arranca en A2 pero se marca como no confirmado.
   const hasLevel   = Boolean(stats.estimated_level);
+  // En francés no hay simulacros ni fecha de examen todavía: la ruta es la del
+  // DALF y la cuenta atrás no se enseña, en vez de contar hacia la del CAE.
+  const frances    = stats.idioma === 'fr';
   const currentLvl = stats.estimated_level || 'A2';
   const currentIdx = levels.indexOf(currentLvl);
 
   // Configuración de examen (meta)
+  // Sin fecha de examen no hay cuenta atrás. Antes se caía al 1-dic "por
+  // defecto", y la pantalla contaba días hacia un examen que nadie tenía
+  // puesto. Desde el 28-sep el Cambridge es un objetivo sin fecha.
+  const conFecha   = !frances && Boolean(stats.exam_date);
   const targetDate = stats.exam_date || '2026-12-01';
   const now        = new Date();
   const examDt     = new Date(targetDate);
@@ -80,7 +87,7 @@ function renderProgressDashboard(stats) {
     <!-- 1. ROADMAP A2→B1→B2→C1 ─────────────────────────── -->
     <div class="glass-card-accent anim-fade-in">
       <div class="card-title" style="text-align:center;margin-bottom:16px">
-        <img src="src/img/icons/trophy.png" alt="" class="ico"> CAMBRIDGE CAE — RUTA DE APRENDIZAJE
+        <img src="src/img/icons/trophy.png" alt="" class="ico"> ${frances ? 'FRANCÉS · DALF C1' : 'CAMBRIDGE CAE'} — RUTA DE APRENDIZAJE
       </div>
       <div class="prg-roadmap">
         <div class="prg-roadmap-line">
@@ -181,7 +188,7 @@ function renderProgressDashboard(stats) {
     </div>
 
     <!-- 5. COUNTDOWN AL EXAMEN ───────────────────────────── -->
-    <div class="prg-countdown-card anim-slide-up" style="animation-delay:0.15s">
+    <div class="prg-countdown-card anim-slide-up" style="animation-delay:0.15s;${conFecha ? '' : 'display:none'}">
       <div class="prg-countdown-svg">
         <svg viewBox="0 0 72 72" width="72" height="72">
           <defs>
@@ -243,8 +250,8 @@ function renderProgressDashboard(stats) {
         </div>
         <div style="width:1px;background:rgba(156,190,214,0.25)"></div>
         <div class="prg-record-item">
-          <div class="prg-record-value" style="color:var(--success)">${daysLeft}</div>
-          <div class="prg-record-label">Días para CAE</div>
+          <div class="prg-record-value" style="color:var(--success)">${conFecha ? daysLeft : '—'}</div>
+          <div class="prg-record-label">${conFecha ? 'Días para CAE' : 'Sin fecha de examen'}</div>
         </div>
       </div>
     </div>

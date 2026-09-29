@@ -148,6 +148,19 @@ function renderFlashCard() {
 // Bloque de pronunciación de una carta: figurada, botón de escuchar y avisos.
 // El servidor manda la figurada ya troceada en `pron` (ver /user-words).
 function pronDeCarta(carta) {
+  // Sin figurada (el francés no la tiene) la carta se queda al menos con el
+  // botón de escuchar: antes iba dentro del bloque de la figurada, y en francés
+  // no había forma de oír la palabra.
+  if (carta?.word && (!carta.pron || typeof pronFrase !== 'function')) {
+    return `
+    <div class="flash-pron" onclick="event.stopPropagation()">
+      <div class="flash-pron-fila" style="justify-content:center">
+        <button class="btn-icon" onclick="pronDecir(${JSON.stringify(carta.word).replace(/"/g, '&quot;')}, 1, this)" aria-label="Escuchar">
+          <img src="src/img/icons/listen.png" alt="" class="ico">
+        </button>
+      </div>
+    </div>`;
+  }
   if (!carta?.pron || typeof pronFrase !== 'function') return '';
   const p = carta.pron;
   const avisos = typeof pronAvisosFrase === 'function' ? pronAvisosFrase(p) : '';
@@ -252,8 +265,8 @@ function showAddWordForm() {
     <div class="glass-card anim-slide-up">
       <div class="card-title">AÑADIR PALABRA</div>
       <div class="field">
-        <label>Palabra (EN)</label>
-        <input class="field-input" id="add-word"    placeholder="e.g. endeavour">
+        <label>Palabra (${typeof _idioma !== 'undefined' && _idioma === 'fr' ? 'FR' : 'EN'})</label>
+        <input class="field-input" id="add-word"    placeholder="${typeof _idioma !== 'undefined' && _idioma === 'fr' ? 'p. ej. se débrouiller' : 'e.g. endeavour'}">
       </div>
       <div class="field">
         <label>Traducción (ES)</label>
@@ -261,7 +274,7 @@ function showAddWordForm() {
       </div>
       <div class="field">
         <label>Ejemplo</label>
-        <input class="field-input" id="add-example" placeholder="Frase de ejemplo en inglés">
+        <input class="field-input" id="add-example" placeholder="Frase de ejemplo en ${typeof _idioma !== 'undefined' && _idioma === 'fr' ? 'francés' : 'inglés'}">
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="field">

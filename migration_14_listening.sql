@@ -37,8 +37,12 @@ ALTER TABLE exam_questions
   ADD COLUMN IF NOT EXISTS listening_id INTEGER REFERENCES listening_tasks(id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS exam_questions_listening_idx ON exam_questions(listening_id, order_index);
 
-DELETE FROM exam_questions WHERE part IN ('listening_mc','listening_gap','listening_match');
-DELETE FROM listening_tasks;
+-- Sólo lo del Cambridge: los audios de francés (slug 'fr-l-…', migración 32)
+-- viven en las mismas tablas. Por slug y no por `lang`, que aún no existe
+-- cuando esta migración corre en una base nueva.
+DELETE FROM exam_questions WHERE part IN ('listening_mc','listening_gap','listening_match')
+   AND (listening_id IS NULL OR listening_id NOT IN (SELECT id FROM listening_tasks WHERE slug LIKE 'fr-%'));
+DELETE FROM listening_tasks WHERE slug NOT LIKE 'fr-%';
 
 -- ══════════════════════ PARTE 1 · EXTRACTOS BREVES ══════════════════════
 INSERT INTO listening_tasks (slug, part, title, intro, script) VALUES

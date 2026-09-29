@@ -40,6 +40,70 @@ const XP_LEVELS = [
   { rank: 'S', label: 'Cambridge',    xp: 4000 },
 ];
 
+// ── IDIOMA ACTIVO ───────────────────────────────────────
+// Desde el 27-sep-2026 la app entrena inglés Y francés (se va a trabajar a la
+// Suiza romanda). El idioma activo lo guarda el servidor —el aviso diario tiene
+// que saberlo— y aquí se copia en `_idioma` antes de pintar nada: la voz, el
+// micrófono y los textos dependen de él.
+//
+// Se guarda también en localStorage sólo para arrancar sin red con el último
+// idioma usado, no como fuente de verdad.
+const IDIOMA_KEY = 'ti_idioma';
+const IDIOMA_INFO = {
+  en: { nombre: 'inglés',  cabecera: 'INGLÉS',  voz: 'en-GB', examen: 'Cambridge C1' },
+  fr: { nombre: 'francés', cabecera: 'FRANCÉS', voz: 'fr-FR', examen: 'DALF C1' },
+};
+let _idioma = (() => {
+  try { const g = localStorage.getItem(IDIOMA_KEY); return IDIOMA_INFO[g] ? g : 'en'; }
+  catch { return 'en'; }
+})();
+let _tetrisActivo = true;
+
+/** Etiqueta de voz (y de micrófono) del idioma activo: 'en-GB' o 'fr-FR'. */
+const idiomaVoz = () => IDIOMA_INFO[_idioma]?.voz || 'en-GB';
+
+async function cargarIdioma() {
+  try {
+    const r = await apiGet('/idioma');
+    if (r && IDIOMA_INFO[r.idioma]) {
+      _idioma = r.idioma;
+      _tetrisActivo = r.tetris_activo !== false;
+      try { localStorage.setItem(IDIOMA_KEY, _idioma); } catch {}
+    }
+  } catch { /* sin red se sigue con el último idioma conocido */ }
+  pintarIdioma();
+}
+
+/** La cabecera dice qué idioma se está estudiando, y el botón deja cambiarlo. */
+function pintarIdioma() {
+  const info = IDIOMA_INFO[_idioma];
+  const tit = document.getElementById('hdr-titulo');
+  if (tit) tit.innerHTML = `TUTOR<span>${info.cabecera}</span>`;
+  const btn = document.getElementById('idioma-btn');
+  if (btn) {
+    btn.textContent = _idioma.toUpperCase();
+    btn.setAttribute('aria-label', `Estudiando ${info.nombre}. Cambiar de idioma`);
+  }
+  document.body.dataset.idioma = _idioma;
+}
+
+/**
+ * Cambia de idioma y recarga. Recargar es a propósito: cada sección guarda su
+ * estado (listas, colas de repaso, voz elegida) y reiniciarlas una a una es
+ * dejar alguna con el idioma anterior. Con el service worker en red-primero, la
+ * recarga tarda lo mismo que abrir la app.
+ */
+async function cambiarIdioma() {
+  const otro = _idioma === 'fr' ? 'en' : 'fr';
+  try {
+    await apiPut('/idioma', { idioma: otro });
+    try { localStorage.setItem(IDIOMA_KEY, otro); } catch {}
+    location.reload();
+  } catch (e) {
+    toastError(e);
+  }
+}
+
 // ── STATE ───────────────────────────────────────────────
 let _token       = localStorage.getItem(TOKEN_KEY) || '';
 let _xpTotal     = 0;
@@ -610,6 +674,8 @@ async function loadHoyData() {
   // Activación del aviso diario, lo primero de la pantalla mientras haga falta
   if (typeof pintarAvisoHoy === 'function') pintarAvisoHoy();
   if (typeof pintarDiagnosticoHoy === 'function') pintarDiagnosticoHoy();
+  // El día Tetris: qué toca ahora, y el texto del botón grande.
+  if (typeof pintarTetrisHoy === 'function') pintarTetrisHoy();
 }
 
 async function loadStreakWeek() {
@@ -634,12 +700,16 @@ async function loadStats() {
     const stats = await apiGet('/stats');
     if (!stats) return;
     updateXpBar(stats.xp_total || 0);
-    // Sin datos suficientes no se inventa un nivel: se muestra un guion.
+    // Sin datos suficientes no se inventa un nivel: se muestra un guion. Si no
+    // hay destrezas medidas pero sí test de nivel, se enseña el del test, que
+    // también es una medición —y el título dice de dónde sale—.
     const lvl = document.getElementById('lvl-badge');
-    lvl.textContent = stats.estimated_level || '—';
+    lvl.textContent = stats.estimated_level || stats.nivel_test || '—';
     lvl.title = stats.estimated_level
       ? `Estimado a partir de ${stats.level_evidence} destreza(s) con datos`
-      : 'Aún no hay datos suficientes para estimar tu nivel';
+      : stats.nivel_test
+        ? 'Según el test de nivel (gramática y léxico, no cómo hablas)'
+        : 'Aún no hay datos suficientes para estimar tu nivel';
     if (stats.streak !== undefined) {
       _streak = stats.streak;
       document.getElementById('streak-count').innerHTML = `<img src="src/img/icons/streak.png" alt="" class="ico"> ${stats.streak}`;
@@ -659,7 +729,21 @@ function renderExam()     { if (typeof initExam     === 'function') initExam(); 
 function renderProgress() { if (typeof initProgress === 'function') initProgress(); }
 // ESCRIBIR no tiene módulo propio: vive en writing.js, que hasta el 12-ago sólo
 // se cargaba desde dentro de SIMULACROS.
-function renderEscribir() { if (typeof loadWritingTasks === 'function') loadWritingTasks(); }
+function renderEscribir() {
+  // Las tareas son las del idioma activo (el servidor filtra). En francés hay
+  // dos tipos, y se dice cuál es cuál: los correos que hacen falta en cuanto se
+  // llega a Suiza, y el formato del DALF C1, que es la fase 3.
+  const frances = _idioma === 'fr';
+  const tit = document.getElementById('escribir-tit');
+  const sub = document.getElementById('escribir-sub');
+  if (tit) tit.textContent = frances ? 'ESCRIBIR EN FRANCÉS' : 'LAS TAREAS DEL C1';
+  if (sub) sub.textContent = frances
+    ? 'Primero los correos de tu primer mes en Suiza (B1); al final, la síntesis y el ensayo del DALF C1. Te puntúas tú con los criterios del DALF.'
+    : 'Escribes tú y te puntúas con la rúbrica oficial de Cambridge.';
+  const aviso = document.getElementById('escribir-aviso');
+  if (aviso) aviso.innerHTML = '';
+  if (typeof loadWritingTasks === 'function') loadWritingTasks();
+}
 function renderSettings() {
   if (typeof initSettings === 'function') initSettings();
   pintarVersion();   // se refresca al entrar, para leer el último gesto hecho
@@ -691,6 +775,9 @@ function registerSW() {
 
 // ── INIT ─────────────────────────────────────────────────
 async function initApp() {
+  // El idioma va antes que nada: HOY, la voz y el micrófono dependen de él.
+  await cargarIdioma();
+
   // Los accesos directos del manifest abren la app en una sección concreta
   // (/?s=work). Si no viene nada, o viene algo raro, se arranca en HOY.
   const pedida = new URLSearchParams(location.search).get('s');
@@ -706,11 +793,13 @@ async function initApp() {
   // abre sola: quien viene de un aviso ya ha decidido que quiere estudiar, y
   // hacerle buscar el botón es perder justo ahí a la mitad de la gente.
   if (typeof autoAbrirSesion === 'function') autoAbrirSesion();
+  // Lo mismo con los avisos del modo Tetris (/?tetris=despertar|almohada).
+  if (typeof autoAbrirTetris === 'function') autoAbrirTetris();
 }
 
 // Se sube a mano en cada despliegue que cambie el frontend. Se ve en Ajustes,
 // para poder comprobar qué está corriendo el móvil sin adivinarlo.
-const APP_VERSION = 'v18 · 2-ago-2026';
+const APP_VERSION = 'v21 · 28-sep-2026';
 
 function pintarVersion() {
   const el = document.getElementById('version-app');
@@ -733,6 +822,9 @@ async function boot() {
   initNavDeslizante();
   initSwipe();
   pintarVersion();
+  // Con el último idioma conocido, para que la cabecera no diga INGLÉS un
+  // segundo antes de que el servidor confirme que es FRANCÉS.
+  pintarIdioma();
 
   // Ocultar splash tras 1.3s (la animación del splash-fill dura 1.2s)
   setTimeout(() => {

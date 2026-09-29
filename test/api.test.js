@@ -57,24 +57,33 @@ test('los datos exigen autenticación', async (t) => {
   assert.strictEqual(r.status, 401);
 });
 
-test('las tareas de Reading nunca exponen la respuesta correcta', conAuth, async () => {
-  const lista = await (await get('/reading/tasks')).json();
-  assert.ok(Array.isArray(lista) && lista.length, 'debería haber tareas de Reading');
-  for (const t of lista) {
-    const texto = await (await get(`/reading/task/${t.slug}`)).text();
-    assert.ok(!texto.includes('"answer"'),
-      `la tarea ${t.slug} está filtrando la respuesta al cliente`);
+// Las listas dan las del idioma activo, así que cada test dice de qué idioma
+// habla: sin `?lang=`, el resultado dependía de si se había dejado la app en
+// inglés o en francés.
+test('las tareas de Reading y Listening nunca exponen la respuesta correcta', conAuth, async () => {
+  for (const lang of ['en', 'fr']) {
+    const textos = await (await get(`/reading/tasks?lang=${lang}`)).json();
+    const audios = await (await get(`/listening/tasks?lang=${lang}`)).json();
+    if (lang === 'en') assert.ok(textos.length && audios.length, 'debería haber Reading y Listening del Cambridge');
+    for (const t of textos) {
+      const texto = await (await get(`/reading/task/${t.slug}`)).text();
+      assert.ok(!texto.includes('"answer"'), `el texto ${t.slug} está filtrando la respuesta al cliente`);
+    }
+    for (const t of audios) {
+      const texto = await (await get(`/listening/task/${t.slug}`)).text();
+      assert.ok(!texto.includes('"answer"'), `el audio ${t.slug} está filtrando la respuesta al cliente`);
+    }
   }
 });
 
 test('Reading suma las 26 preguntas del examen oficial', conAuth, async () => {
-  const lista = await (await get('/reading/tasks')).json();
+  const lista = await (await get('/reading/tasks?lang=en')).json();
   const total = lista.reduce((a, t) => a + t.questions, 0);
   assert.strictEqual(total, 26, `Reading (partes 5-8) son 26 preguntas, hay ${total}`);
 });
 
 test('Listening suma las 30 preguntas del examen oficial', conAuth, async () => {
-  const lista = await (await get('/listening/tasks')).json();
+  const lista = await (await get('/listening/tasks?lang=en')).json();
   const total = lista.reduce((a, t) => a + t.questions, 0);
   assert.strictEqual(total, 30, `Listening son 30 preguntas, hay ${total}`);
 });
@@ -101,4 +110,39 @@ test('el corrector de repaso rechaza un grado fuera de rango', conAuth, async ()
     body: JSON.stringify({ rating: 9 }),
   });
   assert.strictEqual(r.status, 400, 'un rating de 9 debería dar 400');
+});
+
+// ── IDIOMAS Y MODO TETRIS ─────────────────────────────────
+// Sólo GET: el test se puede lanzar contra producción, y abrir una noche
+// (POST /tetris/noche) haría el sorteo de verdad para ese día.
+
+test('cada idioma sólo devuelve sus palabras', conAuth, async () => {
+  for (const lang of ['en', 'fr']) {
+    const ws = await (await get(`/words?lang=${lang}`)).json();
+    assert.ok(Array.isArray(ws));
+    const ajenas = ws.filter((w) => w.lang !== lang);
+    assert.strictEqual(ajenas.length, 0, `${lang}: ${ajenas.length} palabras de otro idioma`);
+  }
+});
+
+test('en francés no se calcula figurada inglesa', conAuth, async () => {
+  const ws = await (await get('/user-words?lang=fr')).json();
+  if (!Array.isArray(ws) || !ws.length) return;   // francés aún sin migrar
+  assert.ok(ws.every((w) => !w.pron), 'una palabra francesa no puede llevar la figurada del motor inglés');
+});
+
+test('el test del despertar es a ciegas: no dice qué palabras sonaron', conAuth, async () => {
+  const texto = await (await get('/tetris/despertar')).text();
+  assert.ok(!texto.includes('con_pista'), 'el test del despertar no puede revelar el grupo de cada palabra');
+});
+
+test('el estado del día Tetris siempre dice qué toca', conAuth, async () => {
+  const t = await (await get('/tetris/hoy')).json();
+  assert.ok(['despertar', 'ronda', 'almohada', 'noche', 'hecho'].includes(t.fase), `fase desconocida: ${t.fase}`);
+  assert.ok(t.resultados && typeof t.resultados.veredicto === 'string');
+});
+
+test('el test de nivel del francés nunca envía la respuesta correcta', conAuth, async () => {
+  const texto = await (await get('/diagnostico/fr')).text();
+  assert.ok(!texto.includes('"correcta"'), 'la respuesta del test de francés no puede salir del servidor');
 });

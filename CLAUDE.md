@@ -1,7 +1,12 @@
 # TutorIngles
 
-App para aprender inglés enfocada al día a día por sector (empieza por **dependiente**, que es
-el trabajo de Edwin en Sprinter) y de ahí hacia el **C1 de Cambridge**.
+App para aprender **inglés y francés** enfocada al día a día por sector (empieza por
+**dependiente**, que es el trabajo de Edwin en Sprinter) y de ahí hacia el **C1** de cada idioma:
+**Cambridge C1 Advanced** y **DALF C1**.
+
+**Desde el 27-sep-2026 el francés va primero**: Edwin se va a trabajar a un cantón francófono de
+Suiza en torno a un mes. Francés A2 (entiende mucho, no consigue explicarse), inglés B1. Ver
+"Dos idiomas y modo Tetris" más abajo.
 
 **En producción** desde el 20-jul-2026 en `https://tutoringles.tinafusion.com`.
 
@@ -18,7 +23,7 @@ el trabajo de Edwin en Sprinter) y de ahí hacia el **C1 de Cambridge**.
 | Comando | Qué hace |
 |---|---|
 | `npm start` | `node server.js` |
-| `npm test` | `node --test` — tests nativos de Node (52, de los que 8 se saltan sin servidor) |
+| `npm test` | `node --test` — tests nativos de Node (126, de los que 13 se saltan sin servidor) |
 | `npm run test:fsrs` | tests del algoritmo de repetición espaciada |
 | `node tools/generar-lexico.js` | regenera el diccionario de pronunciación |
 
@@ -26,6 +31,111 @@ No hay build. Para arrancar en local en Windows: `iniciar-local.cmd`.
 
 **El service worker va por versión: al tocar cualquier JS hay que subir `VERSION` en `sw.js`**,
 o los usuarios se quedan con la versión cacheada.
+
+## Dos idiomas y modo Tetris (27-sep-2026)
+
+### El francés no es otra app
+
+Va en las **mismas tablas** con una columna `lang` (`words`, `tracks`, `grammar_topics`) y un
+idioma activo en `config.idioma_activo`, que se cambia con el chip EN/FR de la cabecera. Así el
+SRS, la sesión de 5 minutos, TRABAJO, PALABRAS, HABLAR y los avisos sirven para los dos sin
+duplicar nada. El idioma vive en el servidor y no en el navegador porque el aviso diario sale
+del servidor y tiene que saber de qué idioma hablar.
+
+- **Toda consulta de contenido filtra por idioma.** `idiomaActivo()` / `idiomaDe(req)` en
+  server.js (`?lang=` para forzar uno). Una consulta nueva sobre `words` sin `w.lang = …` mezcla
+  los dos idiomas: en la sesión saldrían palabras inglesas con la voz francesa.
+- **El sector va por idioma**: `sectorDe(lang)` da el del perfil si es de ese idioma y, si no, el
+  primero que haya. El francés tiene el suyo, `suisse-romande` (12 situaciones). Las columnas
+  `situations.title_en` y `situation_lines.en` se llaman así por herencia: guardan el texto **en
+  el idioma del sector**.
+- **La figurada es sólo del inglés** (`figurarSi(lang, …)`). Con una palabra francesa buscaría el
+  AFI en el diccionario inglés y, si por casualidad existe ("table"), la enseñaría a leer en inglés.
+- **El audio grabado (Emily) es sólo del inglés.** `voz.js` no consulta el índice si el idioma no
+  es inglés: el índice se busca por texto y "table" francesa habría sonado con la grabación inglesa.
+- **Voz y micrófono por idioma.** `vozDecir` lee en el idioma activo salvo que se le pida otro;
+  lo que es siempre inglés (SONIDOS inglés, listening) lo pide explícitamente. La voz preferida se
+  guarda una por idioma (`voz_preferida` y `voz_preferida_fr`). Para el francés se puntúa por
+  encima fr-CH y fr-FR, y por debajo fr-CA: en iOS Amélie es de Quebec y no es el acento de Lausana.
+- **SONIDOS en francés es otra cosa** (`src/js/sons.js`): nueve contrastes que un hispanohablante
+  no oye (u/ou, s/z, b/v, le/les, nasales…), con ronda de oído. Material didáctico, sin migración.
+- **El plan del francés va por fases, no por días** (`lib/fases.js`, `/plan/fases`): sobrevivir →
+  trabajar → DALF C1, y se pasa de fase cuando los datos lo dicen. Una palabra cuenta cuando está
+  **consolidada** (estabilidad FSRS ≥ 7 días), no por haberla acertado una vez. El plan de 30 días
+  sigue siendo del inglés.
+- **SIMULACROS cambia entero con el idioma**: en inglés, el Cambridge (su panel pide siempre
+  `/exam-attempts?lang=en`); en francés, el panel del DALF (`renderExamDashboardFr`).
+
+### Comprensión en francés y el Cambridge sin fecha (28-sep-2026)
+
+- **Comprensión oral y escrita del francés en tres escalones, B1 → B2 → C1** (migración 32, en
+  las mismas tablas que el Reading y el Listening del CAE, con `lang`). **Los B1 son la prueba
+  inicial** de comprensión. Las preguntas van en francés, como en el DELF/DALF. Los guiones los lee
+  la voz francesa del móvil (`speaker = 'fr-FR'`): no hay audio grabado del francés, porque el
+  audio grabado se hacía en Higgsfield y esa cuenta ya no existe.
+- **Sólo lo C1 es nota de examen**, en Reading y Listening igual que en ESCRIBIR: el cliente sólo
+  manda `/exam-attempts` si `level === 'C1'`. Un 90 % en un texto de B1 no dice que leas en C1.
+- **La fase 3 cuenta la comprensión**: aprobada (≥ 50 % en un C1) la oral y la escrita, por
+  separado, como exige el DALF. Ya no queda ningún objetivo "aún no está en la app".
+- **El Cambridge no tiene fecha.** Sigue siendo objetivo, pero la del 31-oct se quitó (migración
+  31, sólo si seguía siendo ésa). Sin fecha no hay cuenta atrás en PROGRESO —antes se caía al
+  1-dic "por defecto"— y en Ajustes la fecha se puede dejar vacía.
+
+### Escribir, el oral y el nivel en francés (28-sep-2026)
+
+- **Las notas van por idioma** (`exam_attempts.lang`, migración 29). `/stats` y `/exam-attempts`
+  filtran por el idioma activo; un ensayo del DALF no entra en la media del Writing del CAE.
+- **ESCRIBIR y el oral de HABLAR dan las tareas del idioma activo** (`writing_tasks.lang`,
+  `speaking_tasks.lang`). En francés hay dos tipos (`nivel`): correos y cartas para el primer mes
+  en Suiza (B1/B2) y la síntesis y el ensayo del DALF (C1); en el oral, hablar de ti (B1) y el
+  exposé y el debate del DALF, cuyo `prompts.documents` es el dossier.
+- **Sólo las tareas C1 cuentan como intento de examen.** Un 18/20 en un correo de B1 no dice que
+  escribas en C1, y si contase, la cabecera se inventaría un nivel.
+- **La rúbrica cambia con el idioma de la tarea**: los mismos cuatro números en las mismas
+  columnas, pero con los criterios del DALF (`RUBRICA_FR` en writing.js). Es una autoevaluación
+  simplificada —el DALF real puntúa sobre 25— y la pantalla lo dice.
+- **El test de nivel del francés no es el del inglés** (`lib/test-frances.js`,
+  `/diagnostico/fr`). El del inglés mide cuánto falta para aprobar un C1; éste UBICA: 24 preguntas
+  de opciones en cuatro franjas (A2 → C1), y el nivel es la franja más alta superada con 4 de 6
+  **sin saltarse ninguna**. Cada pregunta trae "No lo sé", y hay un test que simula 2.000 personas
+  adivinando: casi nunca pasan de A2. **Las opciones se barajan en cada petición**: escritas a
+  mano, la buena iba siempre la primera. Guarda en `config.nivel_medido_fr`, y la cabecera enseña
+  ese nivel cuando no hay destrezas medidas (`stats.nivel_test`).
+
+### El modo Tetris
+
+Petición literal: "estudiar por el día y por la noche, durmiendo, repasar los conceptos", como el
+efecto Tetris. Lo que se construyó y **lo que no se prometió**:
+
+- **De día, rondas** de la sesión de 5 minutos (`tetris_rondas`, 6). Cada `/sesion-diaria/fin` es
+  una ronda en `tetris_dias`. **Lo fallado hoy vuelve en la ronda siguiente** (hasta media ronda),
+  no mañana: con una sesión al día daba igual, con seis era tirar cinco oportunidades.
+- **Antes de dormir, repaso de almohada**: las palabras del día, del español al idioma (la
+  dirección difícil: el hueco es producir), oyendo cada una con la voz del sistema — la misma que
+  sonará de noche.
+- **Dormido, pistas (TMR)**: la mitad de las palabras del día suenan bajito, sólo la palabra
+  extranjera y **nunca la traducción** (oírla detrás anula el efecto en los estudios). Espera
+  inicial (dormirse), un tramo de 90 min (el sueño profundo es la primera parte de la noche) y
+  pausas. **Palabras nuevas durmiendo no funcionan y la app no lo intenta.**
+- **Por la mañana, test a ciegas**: la otra mitad fue el grupo de **control**, y el test compara.
+  `lib/tetris.js` dice el veredicto — también "no te funciona" y "te está despertando" — y no se
+  pronuncia hasta 7 noches. El test cuenta como repaso FSRS.
+
+Cuatro detalles que costaría redescubrir:
+
+- **El día de estudio va de 05:00 a 05:00** (`diaDeEstudio`). Quien repasa a las 00:30 sigue en su
+  día: la noche tiene que tirar de lo de esa tarde, no de un día nuevo vacío.
+- **El sorteo es estratificado y se hace una vez por noche.** Por dificultad, de dos en dos, para
+  que un grupo no se lleve todas las difíciles; y reabrir el modo noche devuelve el mismo reparto.
+- **En una web, la noche necesita la pantalla encendida**: con el móvil bloqueado, iOS congela la
+  página y no suena nada. Pantalla negra + Wake Lock (iOS 18.4+ en la app instalada; si no hay,
+  se avisa). Las pistas **sólo cuentan si la página estaba visible al sonar**, y una noche con
+  menos de 20 no entra en la comparación: contarla falsearía el dato que decide si esto sirve.
+- **El test del despertar no recibe `con_pista`** (hay test de API): saber qué sonó cambia cómo
+  se juzga uno mismo.
+
+Avisos nuevos: `despertar` (08:00) y `almohada` (22:30), cada uno con su candado en `push_log`
+(tipo distinto) y su `tag`, para que no se tapen entre ellos ni con el diario.
 
 ## Que la app se abra
 
@@ -413,7 +523,11 @@ acumulativas idempotentes**, que se aplican a mano y en orden:
 `_10` FSRS → `_11` reading → `_12` iconos → `_13` writing y speaking → `_14` listening →
 `_15` iconos por sector → `_16` pronunciación → `_17` AFI por par mínimo → `_18` avisos y sesión →
 `_19` correcciones de los pares (la h, r/l, e-fantasma, AFI y orden) → `_20` qué pares tienen
-audio fiable → `_21` situaciones por tandas.
+audio fiable → `_21` situaciones por tandas → `_22`/`_23` test de nivel → `_24` idiomas y modo
+Tetris → `_25` vocabulario de francés (217, **el orden de las filas es el orden de estudio**) →
+`_26` situaciones de la Suiza romanda → `_27` gramática de francés → `_28` más inglés C1 (116) →
+`_29` idioma y nivel en escribir, el oral y las notas → `_30` tareas de escribir y del oral en francés →
+`_31` comprensión por idioma y Cambridge sin fecha → `_32` comprensión oral y escrita en francés.
 
 **Ojo: las tablas son de `postgres`, no del usuario `tutoringles`.** Cualquier migración con
 `ALTER TABLE` hay que aplicarla con `-U postgres` o responde `must be owner of table`. La

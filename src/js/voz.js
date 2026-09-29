@@ -17,6 +17,12 @@
 // un 404): se lee una vez el manifiesto src/audio/index.json que escribe
 // tools/cortar-audio.js. Ficheros e índice viajan juntos en el repo, así que
 // no hay forma de que se desincronicen.
+//
+// DOS IDIOMAS (27-sep-2026). Todo lo de aquí va ahora por idioma: la voz se
+// elige y se puntúa para el idioma de lo que se lee, y la preferida se guarda
+// una por idioma. El audio grabado (Emily) es SÓLO inglés: el índice se busca
+// por texto, y sin este filtro la palabra francesa "table" habría sonado con
+// la grabación inglesa de "table".
 
 // ── VOCES DEL SISTEMA ────────────────────────────────────
 
@@ -32,6 +38,31 @@ const VOZ_PREMIO = [
   [/\b(hazel|george|susan)\b/i,                       10],  // viejas pero pasables
 ];
 
+// Lo mismo para el francés. Ojo con Amélie y Chantal: en iOS son de Quebec
+// (fr-CA), y el acento canadiense no es el que va a oír en Lausana. Por eso el
+// fr-CA puntúa por debajo del fr-FR aunque la voz sea buena. Ariane y Fabrice
+// son las voces neuronales suizas de Microsoft (fr-CH): si el aparato las
+// tiene, son las mejores posibles para lo que viene.
+const VOZ_PREMIO_FR = [
+  [/neural|natural|premium|enhanced|wavenet/i, 60],
+  [/\b(ariane|fabrice)\b/i,                         55],  // Microsoft fr-CH
+  [/google fran[cç]ais/i,                          50],
+  [/\b(denise|henri|eloise|vivienne|remy|brigitte|alain|jacqueline)\b/i, 40], // Microsoft fr-FR
+  [/\b(thomas|audrey|aur[eé]lie|marie|daniel)\b/i,  35],  // iOS y macOS fr-FR
+];
+
+// Qué variante del idioma se prefiere, a igualdad de calidad.
+const VOZ_VARIANTE = {
+  en: [[/^en-GB/i, 30]],
+  fr: [[/^fr-CH/i, 35], [/^fr-FR/i, 30], [/^fr-BE/i, 15], [/^fr-CA/i, 0]],
+};
+
+/** 'fr-FR' → 'fr'. Lo que no se reconozca, inglés. */
+const vozBase = (lang) => (/^fr/i.test(lang || '') ? 'fr' : 'en');
+
+/** La etiqueta del idioma activo, si app.js ya la tiene. */
+const vozLangActivo = () => (typeof idiomaVoz === 'function' ? idiomaVoz() : 'en-GB');
+
 // Apple mete en la lista un puñado de voces de broma —Albert, Bubbles, Zarvox,
 // y una llamada literalmente Whisper— que salen por `getVoices()` como
 // cualquier otra. Sin castigarlas, en un iPhone donde ninguna voz coincidía con
@@ -42,85 +73,97 @@ const VOZ_CASTIGO = [
   [/\b(albert|bad news|good news|bahh|bells|boing|bubbles|cellos|deranged|jester|organ|superstar|trinoids|whisper|wobble|zarvox|hysterical|princess|junior|ralph|fred|kathy|bruce|agnes|vicki|victoria)\b/i, -200],
 ];
 
-let _vozElegida = null;
-let _vozAvisada = false;
+// Voz elegida por idioma: { en: SpeechSynthesisVoice, fr: … }.
+const _vozElegida = {};
+const _vozAvisada = {};
 
 // Voz elegida a mano en Ajustes, si la hay. Manda sobre la puntuación: por
 // buena que sea la heurística, el que oye el resultado es el usuario, y en
 // iPhone conviven voces que suenan muy distinto con nombres casi iguales.
-const VOZ_GUARDADA = 'voz_preferida';
+// La del inglés conserva la clave de siempre para no perder la que ya había.
+const VOZ_GUARDADA = { en: 'voz_preferida', fr: 'voz_preferida_fr' };
 
-const vozGuardada = () => { try { return localStorage.getItem(VOZ_GUARDADA); } catch { return null; } };
+const vozGuardada = (base) => {
+  try { return localStorage.getItem(VOZ_GUARDADA[base]); } catch { return null; }
+};
 
-/** Fija (o quita, con null) la voz preferida. */
-function vozElegir(voiceURI) {
+/** Fija (o quita, con null) la voz preferida de un idioma. */
+function vozElegir(voiceURI, lang = vozLangActivo()) {
+  const base = vozBase(lang);
   try {
-    if (voiceURI) localStorage.setItem(VOZ_GUARDADA, voiceURI);
-    else localStorage.removeItem(VOZ_GUARDADA);
+    if (voiceURI) localStorage.setItem(VOZ_GUARDADA[base], voiceURI);
+    else localStorage.removeItem(VOZ_GUARDADA[base]);
   } catch {}
-  _vozElegida = null;
-  return mejorVoz();
+  delete _vozElegida[base];
+  return mejorVoz(lang);
 }
 
-/** Todas las voces inglesas del aparato, la mejor primero. */
-function vozListar() {
+/** Todas las voces de un idioma que tiene el aparato, la mejor primero. */
+function vozListar(lang = vozLangActivo()) {
   if (!('speechSynthesis' in window)) return [];
+  const base = vozBase(lang);
   return window.speechSynthesis.getVoices()
-    .filter((v) => /^en/i.test((v.lang || '').replace('_', '-')))
-    .map((v) => ({ voz: v, p: puntuarVoz(v) }))
+    .filter((v) => (v.lang || '').replace('_', '-').toLowerCase().startsWith(base))
+    .map((v) => ({ voz: v, p: puntuarVoz(v, base) }))
     .sort((a, b) => b.p - a.p)
     .map((x) => x.voz);
 }
 
-function puntuarVoz(v) {
+function puntuarVoz(v, base = 'en') {
   const lang = (v.lang || '').replace('_', '-');
-  if (!/^en/i.test(lang)) return -Infinity;      // que no sea inglesa la descarta
-  let p = /^en-GB/i.test(lang) ? 30 : 0;         // el objetivo es británico
+  if (!lang.toLowerCase().startsWith(base)) return -Infinity;   // otro idioma: fuera
+  let p = 0;
+  for (const [re, v2] of VOZ_VARIANTE[base] || []) if (re.test(lang)) { p += v2; break; }
   const n = `${v.name || ''} ${v.voiceURI || ''}`;
-  for (const [re, v2] of VOZ_PREMIO) if (re.test(n)) { p += v2; break; }
+  for (const [re, v2] of (base === 'fr' ? VOZ_PREMIO_FR : VOZ_PREMIO)) if (re.test(n)) { p += v2; break; }
   for (const [re, v2] of VOZ_CASTIGO) if (re.test(n)) p += v2;
   return p;
 }
 
-/** La voz elegida a mano, o la mejor que tenga el aparato. */
-function mejorVoz() {
-  if (_vozElegida) return _vozElegida;
+/** La voz elegida a mano para ese idioma, o la mejor que tenga el aparato. */
+function mejorVoz(lang = vozLangActivo()) {
+  const base = vozBase(lang);
+  if (_vozElegida[base]) return _vozElegida[base];
   if (!('speechSynthesis' in window)) return null;
   const voces = window.speechSynthesis.getVoices();
   if (!voces || !voces.length) return null;      // todavía no ha cargado la lista
 
   // Lo que haya elegido el usuario gana siempre, mientras siga instalada.
-  const guardada = vozGuardada();
+  const guardada = vozGuardada(base);
   if (guardada) {
     const suya = voces.find((v) => v.voiceURI === guardada);
-    if (suya) { _vozElegida = suya; return suya; }
+    if (suya) { _vozElegida[base] = suya; return suya; }
   }
 
   let mejor = null, mejorP = -Infinity;
   for (const v of voces) {
-    const p = puntuarVoz(v);
+    const p = puntuarVoz(v, base);
     if (p > mejorP) { mejorP = p; mejor = v; }
   }
-  _vozElegida = mejorP === -Infinity ? null : mejor;
-  return _vozElegida;
+  if (mejorP === -Infinity) return null;
+  _vozElegida[base] = mejor;
+  return mejor;
 }
 
 // Se pide la lista al arrancar y se vuelve a mirar cuando el navegador avisa
 // de que ya la tiene. Sin esto, la primera pulsación siempre sale sin voz.
 if ('speechSynthesis' in window) {
-  mejorVoz();
+  mejorVoz('en-GB');
   window.speechSynthesis.addEventListener?.('voiceschanged', () => {
-    _vozElegida = null;
-    mejorVoz();
+    delete _vozElegida.en;
+    delete _vozElegida.fr;
+    mejorVoz('en-GB');
   });
 }
 
-/** ¿Hay alguna voz inglesa instalada? Sirve para avisar en vez de sonar mal. */
-function hayVozInglesa() {
+/** ¿Hay alguna voz de ese idioma instalada? Sirve para avisar en vez de sonar mal. */
+function hayVozDe(lang = vozLangActivo()) {
   if (!('speechSynthesis' in window)) return false;
+  const base = vozBase(lang);
   const voces = window.speechSynthesis.getVoices();
-  return !voces.length || voces.some((v) => /^en/i.test(v.lang || ''));
+  return !voces.length || voces.some((v) => (v.lang || '').toLowerCase().startsWith(base));
 }
+const hayVozInglesa = () => hayVozDe('en-GB');
 
 // ── AUDIO GRABADO ────────────────────────────────────────
 
@@ -216,8 +259,16 @@ function vozParar() {
  *   btn   botón al que animar mientras suena
  */
 function vozDecir(texto, opciones = {}) {
-  const { veces = 1, btn = null, lang = 'en-GB', sinGrabado = false, lento = false } = opciones;
+  const { veces = 1, btn = null, sinGrabado = false, lento = false } = opciones;
+  // Sin idioma explícito se lee en el que se está estudiando. Lo que es
+  // siempre inglés (SONIDOS, listening) lo pide explícitamente.
+  const lang = opciones.lang || vozLangActivo();
+  const base = vozBase(lang);
   const rate = opciones.rate ?? (lento ? VOZ_LENTO_TTS : 0.9);
+  // Volumen de la voz del sistema (0-1). Lo usa el modo noche: una pista tiene
+  // que oírse apenas. En iOS el volumen de un <audio> no se puede tocar desde
+  // la página, pero el de la voz sintética sí se respeta.
+  const volumen = Math.max(0, Math.min(1, opciones.volumen ?? 1));
 
   // Si esa palabra está grabada, se oye la grabada. Se comprueba AQUÍ y no en
   // cada pantalla a propósito: VOCABULARIO, SONIDOS y la sesión llaman todas a
@@ -231,7 +282,7 @@ function vozDecir(texto, opciones = {}) {
   // vez de la de la app: cambiaba de voz a mitad de ejercicio, justo cuando se
   // está intentando afinar el oído. Nadie llamaba con veces>1 todavía, así que
   // nunca llegó a verse.
-  const idPal = sinGrabado ? null : audioDePalabra(texto);
+  const idPal = sinGrabado || base !== 'en' ? null : audioDePalabra(texto);
   if (idPal != null) return vozReproducir(`src/audio/word-${idPal}.mp3`, btn, texto, opciones);
 
   if (!('speechSynthesis' in window)) {
@@ -240,13 +291,13 @@ function vozDecir(texto, opciones = {}) {
   }
   vozParar();
 
-  const voz = mejorVoz();
-  // Sin voz inglesa el móvil leería el inglés con la voz española. Es mejor
+  const voz = mejorVoz(lang);
+  // Sin voz del idioma el móvil lo leería con la voz española. Es mejor
   // decirlo que dejar que suene mal y que parezca culpa de la app.
-  if (!voz && !hayVozInglesa() && !_vozAvisada) {
-    _vozAvisada = true;
+  if (!voz && !hayVozDe(lang) && !_vozAvisada[base]) {
+    _vozAvisada[base] = true;
     if (typeof toast === 'function') {
-      toast('Tu móvil no tiene voz inglesa instalada: sonará raro', 'error');
+      toast(`Tu móvil no tiene voz ${base === 'fr' ? 'francesa' : 'inglesa'} instalada: sonará raro`, 'error');
     }
   }
 
@@ -274,7 +325,7 @@ function vozDecir(texto, opciones = {}) {
     const u = new SpeechSynthesisUtterance(/[.!?]\s*$/.test(texto) ? texto : `${texto}.`);
     u.lang = voz?.lang || lang;
     u.rate = rate;
-    u.volume = 1;                 // explícito: que nadie lo herede a medias
+    u.volume = volumen;           // explícito: que nadie lo herede a medias
     if (voz) u.voice = voz;
     if (btn && i === 0) btn.classList.add('anim-pulse');
     if (btn && i === veces - 1) {
@@ -372,7 +423,10 @@ function vozReproducir(url, btn, textoRespaldo, opciones = {}) {
  * está oyendo — no es lo mismo imitar a una persona que imitar a una máquina.
  */
 function vozFrase(id, texto, opciones = {}) {
-  if (tieneAudioReal(id)) {
+  // Las grabaciones son todas del inglés (Emily). Una frase francesa nunca
+  // tiene mp3, y así ni se consulta el índice.
+  const lang = opciones.lang || vozLangActivo();
+  if (vozBase(lang) === 'en' && tieneAudioReal(id)) {
     return vozReproducir(`src/audio/frase-${id}.mp3`, opciones.btn || null, texto, opciones);
   }
   return vozDecir(texto, opciones) ? 'sintetico' : null;

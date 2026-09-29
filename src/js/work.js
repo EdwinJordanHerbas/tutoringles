@@ -34,7 +34,16 @@ async function initWork() {
 // así que se pasa el id: si existe la grabación se oye esa, y si no la voz del
 // sistema. voz.js decide.
 function wkSpeak(text, btn, id) {
-  vozFrase(id, text, { btn });
+  vozFrase(id, text, { btn, lang: wkVoz() });
+}
+
+// El idioma de la situación abierta, no el activo a secas: la columna `en` de
+// situation_lines guarda el texto en el idioma del sector, y en la Suiza
+// romanda es francés. Micrófono y voz tienen que ir con él.
+function wkVoz() {
+  return _wkCurrent?.lang === 'fr' ? 'fr-FR'
+       : _wkCurrent?.lang === 'en' ? 'en-GB'
+       : (typeof idiomaVoz === 'function' ? idiomaVoz() : 'en-GB');
 }
 
 // ── COMPARAR LO DICHO CON LO ESPERADO ────────────────────
@@ -290,7 +299,7 @@ function wkPractice(idx, btn) {
   if (_wkRecording) { _wkRec?.stop(); return; }
 
   _wkRec = new WkSpeechRec();
-  _wkRec.lang = 'en-GB';
+  _wkRec.lang = wkVoz();
   _wkRec.interimResults = false;
   _wkRec.maxAlternatives = 1;
 
@@ -354,7 +363,7 @@ function renderRoleplay() {
                         background:${t.kind === 'you' ? 'var(--accent-dim)' : 'var(--surface-2)'};
                         ${i === _wkTurn ? 'outline:1px solid var(--accent)' : ''}">
               <div style="font-size:0.58rem;font-family:var(--font-mono);color:var(--text-4);letter-spacing:1px;margin-bottom:3px">
-                ${t.kind === 'you' ? 'TÚ' : 'CLIENTE'}
+                ${t.kind === 'you' ? 'TÚ' : (_wkCurrent?.lang === 'fr' ? 'INTERLOCUTOR' : 'CLIENTE')}
               </div>
               <div style="font-size:0.85rem;color:var(--text);line-height:1.35">${t.en}</div>
               ${i === _wkTurn ? wkPron(t) : ''}
@@ -412,7 +421,7 @@ function wkPracticeTurn(btn) {
   if (_wkRecording) { _wkRec?.stop(); return; }
 
   _wkRec = new WkSpeechRec();
-  _wkRec.lang = 'en-GB';
+  _wkRec.lang = wkVoz();
   _wkRec.interimResults = false;
 
   _wkRec.onstart = () => {

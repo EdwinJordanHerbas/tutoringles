@@ -116,6 +116,58 @@ const guiaSonidos = require('./lib/guia-sonidos');
 const introPron   = require('./lib/intro-pronunciacion');
 const avisos      = require('./lib/avisos');
 const fechas      = require('./lib/fechas');
+const tetris      = require('./lib/tetris');
+const { fasesFrances } = require('./lib/fases');
+const { IDIOMAS, esIdioma, normalizarIdioma } = require('./lib/idiomas');
+
+// ── IDIOMA ACTIVO ────────────────────────────────────────
+// Desde el 27-sep-2026 la app entrena inglés Y francés. El contenido lleva una
+// columna `lang` y todo lo que se enseña (palabras, situaciones, gramática, la
+// sesión) se filtra por el idioma activo, que vive en config y no en el
+// navegador: así el aviso diario, que sale del servidor, sabe de qué idioma
+// hablar sin que el móvil se lo diga.
+//
+// Se lee en cada petición en vez de cachearlo: es una fila, y una caché aquí
+// tendría que invalidarse también desde PUT /config/:key.
+async function idiomaActivo() {
+  const { rows } = await db("SELECT value FROM config WHERE key='idioma_activo'");
+  return normalizarIdioma(rows[0]?.value);
+}
+
+/** El idioma pedido con ?lang=, o el activo si no se pide ninguno válido. */
+async function idiomaDe(req) {
+  const pedido = req.query?.lang;
+  return esIdioma(pedido) ? pedido : idiomaActivo();
+}
+
+/**
+ * El sector de un idioma: el del perfil si es de ese idioma, y si no el
+ * primero que haya. El perfil tiene UN sector (retail, en inglés), y el
+ * francés tiene el suyo propio (la Suiza romanda): sin esto, cambiar de idioma
+ * dejaba TRABAJO enseñando situaciones en inglés.
+ */
+async function sectorDe(lang) {
+  const { rows } = await db(
+    `SELECT t.* FROM tracks t
+      WHERE t.lang = $2
+      ORDER BY (t.id = (SELECT track_id FROM profiles WHERE id = $1)) DESC NULLS LAST,
+               t.order_index, t.id
+      LIMIT 1`, [PROFILE_ID, lang]);
+  return rows[0] || null;
+}
+
+/** Varias claves de config de una vez, como objeto. */
+async function leerConfig(claves) {
+  const { rows } = await db('SELECT key, value FROM config WHERE key = ANY($1::text[])', [claves]);
+  return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+}
+
+// La figurada (ri-SIIT) es un motor del inglés: con una palabra francesa
+// buscaría su AFI en el diccionario inglés y, si por casualidad existe
+// ("table", "place"), enseñaría a leerla como en inglés. Así que sólo se
+// calcula cuando el contenido es inglés.
+const figurarSi = (lang, filas, campo) =>
+  (lang === 'en' ? conFigurada(filas, campo) : Promise.resolve(filas));
 
 // Claves VAPID de las notificaciones. Sin ellas la app funciona igual, solo que
 // sin avisos: la clave privada firma cada envío y no puede ir en el repositorio.
@@ -214,6 +266,13 @@ app.get('/health', async (req, res) => {
 // cada consulta. Ver lib/fechas.js.
 const todayStr = () => fechas.fechaEnZona();
 
+// La meta de vocabulario con la que nace la fila del día. Tres sitios creaban
+// esa fila sin decirla (la sesión, las situaciones y los pares mínimos), y
+// entonces se quedaba con el DEFAULT de la columna, que es el 20 de la
+// migración base: tras la primera sesión HOY decía "5 / 20" con la meta en 8.
+const SQL_META_VOCAB =
+  "COALESCE((SELECT NULLIF(value, '')::int FROM config WHERE key = 'daily_vocab_target'), 8)";
+
 // Recalcula la racha del día indicado y actualiza streak_max en config.
 // Un día "cuenta" si tiene alguna meta hecha (vocab, gramática o speaking).
 // La racha = racha de ayer + 1 si ayer contó; si hubo hueco, vuelve a 1.
@@ -299,13 +358,17 @@ app.use((req, res, next) => {
   // Config
   if (path.startsWith('/config/') && method === 'GET') {
     const key = path.split('/config/')[1];
-    const defaults = { user_level: 'B1', target_exam_date: '2026-12-01', daily_vocab_target: '20', xp_total: '340' };
+    const defaults = { user_level: 'B1', target_exam_date: '', daily_vocab_target: '8', xp_total: '340' };
     return res.json({ key, value: defaults[key] ?? null });
   }
 
   // Auth
   if (path === '/auth/check') {
     return res.json({ ok: true, user: APP_USER_NAME });
+  }
+
+  if (path === '/idioma' && method === 'GET') {
+    return res.json({ idioma: 'fr', idiomas: IDIOMAS, tetris_activo: true });
   }
 
   // POST/PUT — respuestas genéricas en mock
@@ -321,12 +384,12 @@ app.use((req, res, next) => {
 // ════════════════════════════════════════════════════════
 app.get('/words', async (req, res) => {
   const { level, category } = req.query;
-  let q = 'SELECT * FROM words WHERE 1=1';
-  const params = [];
-  if (level)    { params.push(level);    q += ` AND level=$${params.length}`; }
-  if (category) { params.push(category); q += ` AND category=$${params.length}`; }
-  q += ' ORDER BY id';
   try {
+    let q = 'SELECT * FROM words WHERE lang=$1';
+    const params = [await idiomaDe(req)];
+    if (level)    { params.push(level);    q += ` AND level=$${params.length}`; }
+    if (category) { params.push(category); q += ` AND category=$${params.length}`; }
+    q += ' ORDER BY id';
     const { rows } = await db(q, params);
     res.json(rows);
   } catch (e) { fallo(res, e); }
@@ -344,10 +407,13 @@ app.post('/words', async (req, res) => {
   const { word, translation, example_sentence, level, category, audio_hint } = req.body;
   if (!word || !translation) return res.status(400).json({ error: 'word y translation requeridos' });
   try {
+    // Una palabra añadida a mano es del idioma que se está estudiando, salvo
+    // que se diga otra cosa.
+    const lang = esIdioma(req.body.lang) ? req.body.lang : await idiomaActivo();
     const { rows } = await db(
-      `INSERT INTO words (word, translation, example_sentence, level, category, audio_hint)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [word, translation, example_sentence || null, level || 'B1', category || 'general', audio_hint || null]
+      `INSERT INTO words (word, translation, example_sentence, level, category, audio_hint, lang)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [word, translation, example_sentence || null, level || 'B1', category || 'general', audio_hint || null, lang]
     );
     // Crear entrada en user_words automáticamente
     await db('INSERT INTO user_words (profile_id, word_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
@@ -361,16 +427,17 @@ app.post('/words', async (req, res) => {
 // ════════════════════════════════════════════════════════
 app.get('/user-words', async (req, res) => {
   const { status, due } = req.query;
-  let q = `SELECT uw.*, w.word, w.translation, w.example_sentence, w.level, w.category, w.audio_hint
-           FROM user_words uw JOIN words w ON w.id = uw.word_id
-           WHERE uw.profile_id = $1`;
-  const params = [PROFILE_ID];
-  if (status) { params.push(status); q += ` AND uw.status=$${params.length}`; }
-  if (due === '1') { params.push(todayStr()); q += ` AND uw.next_review_date<=$${params.length}`; }
-  q += ' ORDER BY uw.next_review_date, uw.id';
   try {
+    const lang = await idiomaDe(req);
+    let q = `SELECT uw.*, w.word, w.translation, w.example_sentence, w.level, w.category, w.audio_hint, w.lang
+             FROM user_words uw JOIN words w ON w.id = uw.word_id
+             WHERE uw.profile_id = $1 AND w.lang = $2`;
+    const params = [PROFILE_ID, lang];
+    if (status) { params.push(status); q += ` AND uw.status=$${params.length}`; }
+    if (due === '1') { params.push(todayStr()); q += ` AND uw.next_review_date<=$${params.length}`; }
+    q += ' ORDER BY uw.next_review_date, uw.id';
     const { rows } = await db(q, params);
-    res.json(await conFigurada(rows, 'word'));
+    res.json(await figurarSi(lang, rows, 'word'));
   } catch (e) { fallo(res, e); }
 });
 
@@ -386,59 +453,77 @@ app.post('/user-words/:id/review', async (req, res) => {
   }
 
   try {
-    const { rows } = await db('SELECT * FROM user_words WHERE id=$1 AND profile_id=$2',
-      [req.params.id, PROFILE_ID]);
-    if (!rows.length) return res.status(404).json({ error: 'No encontrado' });
-
-    const w = rows[0];
-    const today = todayStr();
-
-    // Días transcurridos desde el último repaso (0 si es la primera vez).
-    const elapsed = w.last_review
-      ? Math.max(0, Math.round((new Date(today) - new Date(w.last_review)) / 86400000))
-      : 0;
-
-    // Primera vez que se ve la carta → estado inicial. Si no, evolución.
-    const isNew = w.stability == null || w.difficulty == null;
-    const next  = isNew
-      ? fsrsInit(rating)
-      : fsrsNext(Number(w.stability), Number(w.difficulty), elapsed, rating);
-
-    const intervalDays = fsrsInterval(next.stability);
-    const nextDate     = new Date(today);
-    nextDate.setDate(nextDate.getDate() + intervalDays);
-
-    const timesCorrect = w.times_correct + (rating > 1 ? 1 : 0);
-    const timesWrong   = w.times_wrong   + (rating === 1 ? 1 : 0);
-    const lapses       = w.lapses        + (rating === 1 ? 1 : 0);
-
-    // "Dominada" cuando el recuerdo aguanta tres semanas por sí solo.
-    const status = rating === 1 ? 'learning'
-                 : next.stability >= 21 ? 'mastered'
-                 : 'review';
-
-    const { rows: updated } = await db(
-      `UPDATE user_words SET
-         stability=$1, difficulty=$2, interval_days=$3, next_review_date=$4,
-         times_correct=$5, times_wrong=$6, status=$7, reps=reps+1, lapses=$8,
-         last_review=$9
-       WHERE id=$10 RETURNING *`,
-      [next.stability, next.difficulty, intervalDays,
-       nextDate.toISOString().split('T')[0],
-       timesCorrect, timesWrong, status, lapses, today, req.params.id]
-    );
-
-    // Historial: permite reoptimizar los pesos con datos reales más adelante.
-    await db(
-      `INSERT INTO review_log
-         (profile_id, user_word_id, rating, state_before, stability, difficulty, elapsed_days, scheduled_days)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-      [PROFILE_ID, w.id, rating, w.status, next.stability, next.difficulty, elapsed, intervalDays]
-    );
-
-    res.json({ ...updated[0], interval_days: intervalDays, rating });
+    const r = await repasarPalabra(req.params.id, rating);
+    if (!r) return res.status(404).json({ error: 'No encontrado' });
+    res.json(r);
   } catch (e) { fallo(res, e); }
 });
+
+/**
+ * Aplica un repaso FSRS a una carta y lo deja en el historial. Devuelve la
+ * fila actualizada, o null si la carta no es de este perfil.
+ *
+ * Vive fuera del endpoint porque hay dos sitios que repasan de verdad: las
+ * tarjetas y el test del despertar del modo Tetris. Recordar a la mañana una
+ * palabra de ayer ES un repaso, y no apuntarlo sería tirar el dato que mejor
+ * dice cuánto aguanta esa palabra.
+ */
+async function repasarPalabra(userWordId, rating) {
+  const { rows } = await db('SELECT * FROM user_words WHERE id=$1 AND profile_id=$2',
+    [userWordId, PROFILE_ID]);
+  if (!rows.length) return null;
+
+  const w = rows[0];
+  const today = todayStr();
+
+  // Días transcurridos desde el último repaso (0 si es la primera vez).
+  const elapsed = w.last_review
+    ? Math.max(0, Math.round((new Date(today) - new Date(w.last_review)) / 86400000))
+    : 0;
+
+  // Primera vez que se ve la carta → estado inicial. Si no, evolución.
+  const isNew = w.stability == null || w.difficulty == null;
+  const next  = isNew
+    ? fsrsInit(rating)
+    : fsrsNext(Number(w.stability), Number(w.difficulty), elapsed, rating);
+
+  const intervalDays = fsrsInterval(next.stability);
+  const nextDate     = new Date(today);
+  nextDate.setDate(nextDate.getDate() + intervalDays);
+
+  const timesCorrect = w.times_correct + (rating > 1 ? 1 : 0);
+  const timesWrong   = w.times_wrong   + (rating === 1 ? 1 : 0);
+  const lapses       = w.lapses        + (rating === 1 ? 1 : 0);
+
+  // "Dominada" cuando el recuerdo aguanta tres semanas por sí solo.
+  const status = rating === 1 ? 'learning'
+               : next.stability >= 21 ? 'mastered'
+               : 'review';
+
+  const { rows: updated } = await db(
+    `UPDATE user_words SET
+       stability=$1, difficulty=$2, interval_days=$3, next_review_date=$4,
+       times_correct=$5, times_wrong=$6, status=$7, reps=reps+1, lapses=$8,
+       last_review=$9
+     WHERE id=$10 RETURNING *`,
+    [next.stability, next.difficulty, intervalDays,
+     nextDate.toISOString().split('T')[0],
+     timesCorrect, timesWrong, status, lapses, today, w.id]
+  );
+
+  // Historial: permite reoptimizar los pesos con datos reales más adelante.
+  // Y desde el modo Tetris, también dice QUÉ se estudió hoy: las rondas repiten
+  // lo fallado y la noche sortea sus pistas entre las filas de este día.
+  await db(
+    `INSERT INTO review_log
+       (profile_id, user_word_id, rating, state_before, stability, difficulty, elapsed_days, scheduled_days)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [PROFILE_ID, w.id, rating, w.status, next.stability, next.difficulty, elapsed, intervalDays]
+  );
+
+  return { ...updated[0], interval_days: intervalDays, rating };
+}
+
 
 // Previsualiza a cuántos días iría la carta con cada uno de los cuatro botones,
 // para poder mostrarlo en la interfaz antes de pulsar.
@@ -472,7 +557,8 @@ app.get('/grammar-topics', async (req, res) => {
       `SELECT gt.*, gp.completed, gp.score, gp.completed_at
        FROM grammar_topics gt
        LEFT JOIN grammar_progress gp ON gp.topic_id = gt.id AND gp.profile_id = $1
-       ORDER BY gt.order_index`, [PROFILE_ID]
+       WHERE gt.lang = $2
+       ORDER BY gt.order_index, gt.id`, [PROFILE_ID, await idiomaDe(req)]
     );
     res.json(rows);
   } catch (e) { fallo(res, e); }
@@ -620,9 +706,12 @@ app.post('/speaking-practice', async (req, res) => {
 // ════════════════════════════════════════════════════════
 app.get('/exam-attempts', async (req, res) => {
   try {
+    // Las notas de cada idioma van aparte: un ensayo del DALF no puede entrar
+    // en la media del Writing del Cambridge.
     const { rows } = await db(
-      'SELECT * FROM exam_attempts WHERE profile_id=$1 ORDER BY date DESC, created_at DESC LIMIT 30',
-      [PROFILE_ID]);
+      `SELECT * FROM exam_attempts WHERE profile_id=$1 AND lang=$2
+        ORDER BY date DESC, created_at DESC LIMIT 30`,
+      [PROFILE_ID, await idiomaDe(req)]);
     res.json(rows);
   } catch (e) { fallo(res, e); }
 });
@@ -630,11 +719,15 @@ app.get('/exam-attempts', async (req, res) => {
 app.post('/exam-attempts', async (req, res) => {
   const { date, section, score, max_score, notes } = req.body;
   if (!section || score === undefined) return res.status(400).json({ error: 'section y score requeridos' });
+  // Los simulacros que mandan aquí (Reading, Listening, Use of English) son
+  // todos del Cambridge: sin idioma explícito, la nota es del inglés aunque se
+  // hagan con el francés activo.
+  const lang = esIdioma(req.body.lang) ? req.body.lang : 'en';
   try {
     const { rows } = await db(
-      `INSERT INTO exam_attempts (profile_id, date, section, score, max_score, notes)
-       VALUES ($6,$1,$2,$3,$4,$5) RETURNING *`,
-      [date || todayStr(), section, score, max_score || 100, notes || '', PROFILE_ID]
+      `INSERT INTO exam_attempts (profile_id, date, section, score, max_score, notes, lang)
+       VALUES ($6,$1,$2,$3,$4,$5,$7) RETURNING *`,
+      [date || todayStr(), section, score, max_score || 100, notes || '', PROFILE_ID, lang]
     );
     res.json(rows[0]);
   } catch (e) { fallo(res, e); }
@@ -645,20 +738,26 @@ app.post('/exam-attempts', async (req, res) => {
 // ════════════════════════════════════════════════════════
 app.get('/stats', async (req, res) => {
   try {
+    // Todo del idioma activo: el vocabulario y también las notas. En francés,
+    // de momento sólo puede haber Writing (las tareas C1 del DALF, migración
+    // 29); el resto de destrezas sale en blanco, que es la verdad.
+    const lang = await idiomaDe(req);
     const [xpQ, masteredQ, streakQ, sessWeekQ, examQ, sessTotalQ, wordsTotalQ, bestExamQ, examCfgQ, maxStreakQ] = await Promise.all([
       db("SELECT value FROM config WHERE key='xp_total'"),
-      db("SELECT COUNT(*) AS cnt FROM user_words WHERE status='mastered' AND profile_id=$1", [PROFILE_ID]),
+      db(`SELECT COUNT(*) AS cnt FROM user_words uw JOIN words w ON w.id = uw.word_id
+          WHERE uw.status='mastered' AND uw.profile_id=$1 AND w.lang=$2`, [PROFILE_ID, lang]),
       db('SELECT streak FROM daily_goals WHERE profile_id=$1 ORDER BY date DESC LIMIT 1', [PROFILE_ID]),
       // La ventana de 7 días se cuenta desde el día del usuario, no desde el
       // CURRENT_DATE de Postgres, que va en UTC como el resto del servidor.
       db(`SELECT COUNT(*) AS cnt FROM study_sessions
           WHERE profile_id=$1 AND date >= $2::date - INTERVAL '7 days'`, [PROFILE_ID, todayStr()]),
       db(`SELECT section, AVG(score::float/max_score*100) AS avg_pct FROM exam_attempts
-          WHERE profile_id=$1 GROUP BY section`, [PROFILE_ID]),
+          WHERE profile_id=$1 AND lang=$2 GROUP BY section`, [PROFILE_ID, lang]),
       db('SELECT COUNT(*) AS cnt FROM study_sessions WHERE profile_id=$1', [PROFILE_ID]),
-      db('SELECT COUNT(*) AS cnt FROM user_words WHERE profile_id=$1', [PROFILE_ID]),
+      db(`SELECT COUNT(*) AS cnt FROM user_words uw JOIN words w ON w.id = uw.word_id
+          WHERE uw.profile_id=$1 AND w.lang=$2`, [PROFILE_ID, lang]),
       db(`SELECT MAX(score::float/max_score*100) AS best, COUNT(*) AS done FROM exam_attempts
-          WHERE profile_id=$1`, [PROFILE_ID]),
+          WHERE profile_id=$1 AND lang=$2`, [PROFILE_ID, lang]),
       db("SELECT value FROM config WHERE key='target_exam_date'"),
       db('SELECT MAX(streak) AS m FROM daily_goals WHERE profile_id=$1', [PROFILE_ID])
     ]);
@@ -666,7 +765,7 @@ app.get('/stats', async (req, res) => {
     // Intentos por sección (hacen falta para saber si hay datos suficientes)
     const { rows: attemptsBySection } = await db(
       `SELECT section, COUNT(*)::int AS n, AVG(score::float/max_score*100) AS avg_pct
-         FROM exam_attempts WHERE profile_id=$1 GROUP BY section`, [PROFILE_ID]
+         FROM exam_attempts WHERE profile_id=$1 AND lang=$2 GROUP BY section`, [PROFILE_ID, lang]
     );
     // Vocabulario dominado por nivel CEFR
     const { rows: vocabByLevel } = await db(
@@ -674,7 +773,7 @@ app.get('/stats', async (req, res) => {
               COUNT(*)::int AS total,
               COUNT(*) FILTER (WHERE uw.status='mastered')::int AS mastered
          FROM user_words uw JOIN words w ON w.id = uw.word_id
-        WHERE uw.profile_id=$1 GROUP BY w.level`, [PROFILE_ID]
+        WHERE uw.profile_id=$1 AND w.lang=$2 GROUP BY w.level`, [PROFILE_ID, lang]
     );
     const xp        = parseInt(xpQ.rows[0]?.value || '0', 10);
     const mastered  = parseInt(masteredQ.rows[0]?.cnt || '0', 10);
@@ -682,6 +781,7 @@ app.get('/stats', async (req, res) => {
     const sessWeek  = parseInt(sessWeekQ.rows[0]?.cnt || '0', 10);
     const sessTotal = parseInt(sessTotalQ.rows[0]?.cnt || '0', 10);
     const wordsTotal = parseInt(wordsTotalQ.rows[0]?.cnt || '0', 10);
+    const ingles    = lang === 'en';
     const examsDone = parseInt(bestExamQ.rows[0]?.done || '0', 10);
     const bestExam  = bestExamQ.rows[0]?.best != null ? Math.round(bestExamQ.rows[0].best) : null;
     const streak_max = parseInt(maxStreakQ.rows[0]?.m || '0', 10);
@@ -721,7 +821,15 @@ app.get('/stats', async (req, res) => {
       ? ORDER[Math.floor(withLevel.reduce((a, s) => a + ORDER.indexOf(s.level), 0) / withLevel.length)]
       : null;
 
+    // El nivel del test de ubicación del idioma, aparte del estimado por
+    // destrezas: son dos medidas distintas y mezclarlas escondería de dónde
+    // sale cada una. La cabecera usa éste cuando no hay destrezas medidas.
+    const claveTest = lang === 'fr' ? 'nivel_medido_fr' : 'nivel_medido';
+    const nivelTest = (await leerConfig([claveTest]))[claveTest] || null;
+
     res.json({
+      idioma: lang,
+      nivel_test: nivelTest,
       xp_total: xp,
       streak, streak_max,
       words_mastered: mastered,
@@ -735,7 +843,7 @@ app.get('/stats', async (req, res) => {
       exams_done: examsDone,
       best_exam_score: bestExam,
       exam_scores,
-      exam_date: examCfgQ.rows[0]?.value || null,
+      exam_date: ingles ? examCfgQ.rows[0]?.value || null : null,
     });
   } catch (e) { fallo(res, e); }
 });
@@ -940,25 +1048,86 @@ app.post('/diagnostico', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════
+// TEST DE NIVEL DEL FRANCÉS
+// ════════════════════════════════════════════════════════
+// Otro test y otra escala: el del inglés mide cuánto falta para aprobar un C1,
+// éste UBICA (A2 → C1) a alguien que dice estar en A2. Preguntas, respuestas y
+// corrección en lib/test-frances.js; las respuestas no salen nunca de aquí.
+const testFrances = require('./lib/test-frances');
+
+const CLAVES_NIVEL_FR = ['nivel_medido_fr', 'nivel_medido_fr_pct', 'nivel_medido_fr_fecha'];
+
+// GET /diagnostico/fr — el test, sin respuestas
+app.get('/diagnostico/fr', async (req, res) => {
+  try {
+    const c = await leerConfig(CLAVES_NIVEL_FR);
+    res.json({
+      preguntas: testFrances.preguntasParaCliente(),
+      total: testFrances.PREGUNTAS.length,
+      ya_hecho: !!c.nivel_medido_fr,
+      nivel_medido: c.nivel_medido_fr || null,
+      pct: c.nivel_medido_fr_pct ? Number(c.nivel_medido_fr_pct) : null,
+      fecha: c.nivel_medido_fr_fecha || null,
+    });
+  } catch (e) { fallo(res, e); }
+});
+
+// POST /diagnostico/fr — corregir, ubicar y guardar
+app.post('/diagnostico/fr', async (req, res) => {
+  const answers = Array.isArray(req.body?.answers) ? req.body.answers : [];
+  if (!answers.length) return res.status(400).json({ error: 'answers requerido' });
+  try {
+    const r = testFrances.corregir(answers);
+    // Igual que el del inglés: el intento y el resumen en UNA transacción, el
+    // intento primero. Una medición a medias miente peor que ninguna.
+    const cli = await pool.connect();
+    try {
+      await cli.query('BEGIN');
+      await cli.query(
+        `INSERT INTO exam_attempts (profile_id, date, section, score, max_score, notes, lang)
+         VALUES ($1, $2, 'diag', $3, 100, $4, 'fr')`,
+        [PROFILE_ID, todayStr(), r.pct, `Test de nivel de francés · ${r.aciertos}/${r.total} · ${r.nivel}`]);
+      const guardar = (k, v) => cli.query(
+        `INSERT INTO config (key, value) VALUES ($1, $2)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [k, v]);
+      await guardar('nivel_medido_fr', r.nivel);
+      await guardar('nivel_medido_fr_pct', String(r.pct));
+      await guardar('nivel_medido_fr_fecha', todayStr());
+      await cli.query('COMMIT');
+    } catch (e) {
+      await cli.query('ROLLBACK').catch(() => {});
+      throw e;
+    } finally {
+      cli.release();
+    }
+    await addXp(30);
+    res.json(r);
+  } catch (e) { fallo(res, e); }
+});
+
+// ════════════════════════════════════════════════════════
 // READING (partes 5-8 del paper de Reading & Use of English)
 // ════════════════════════════════════════════════════════
 
 // Tareas disponibles, con cuántas preguntas trae cada una.
 app.get('/reading/tasks', async (req, res) => {
   try {
+    // Del idioma activo. En francés van de menos a más nivel (B1 → C1): el B1
+    // es la prueba inicial de comprensión escrita.
     const { rows } = await db(
-      `SELECT t.id, t.slug, t.part, t.title, t.intro, t.level,
+      `SELECT t.id, t.slug, t.part, t.title, t.intro, t.level, t.lang,
               COUNT(q.id)::int AS questions
          FROM exam_texts t
          LEFT JOIN exam_questions q ON q.text_id = t.id
         WHERE t.part IN ('reading_mc','cross_text','gapped_text','multi_match')
+          AND t.lang = $1
         GROUP BY t.id
-        ORDER BY CASE t.part
+        ORDER BY t.level, CASE t.part
                    WHEN 'reading_mc'   THEN 5
                    WHEN 'cross_text'   THEN 6
                    WHEN 'gapped_text'  THEN 7
                    WHEN 'multi_match'  THEN 8
-                 END`
+                 END, t.id`, [await idiomaDe(req)]
     );
     res.json(rows);
   } catch (e) { fallo(res, e); }
@@ -1038,14 +1207,19 @@ app.post('/plan/start', async (req, res) => {
 // Perfil activo: quién eres, qué sector llevas y qué persigues.
 app.get('/profile', async (req, res) => {
   try {
-    const { rows } = await db(
-      `SELECT p.*, t.slug AS track_slug, t.name AS track_name, t.icon AS track_icon
-         FROM profiles p
-         LEFT JOIN tracks t ON t.id = p.track_id
-        WHERE p.id = $1`, [PROFILE_ID]
-    );
+    const { rows } = await db('SELECT p.* FROM profiles p WHERE p.id = $1', [PROFILE_ID]);
     if (!rows.length) return res.status(404).json({ error: 'Perfil no encontrado' });
-    res.json(rows[0]);
+    // El sector que se enseña es el del idioma activo: en francés, la Suiza
+    // romanda; en inglés, el del perfil (la tienda).
+    const lang = await idiomaDe(req);
+    const t = await sectorDe(lang);
+    res.json({
+      ...rows[0],
+      idioma: lang,
+      track_slug: t?.slug || null,
+      track_name: t?.name || null,
+      track_icon: t?.icon || null,
+    });
   } catch (e) { fallo(res, e); }
 });
 
@@ -1079,6 +1253,7 @@ app.get('/tracks', async (req, res) => {
 // Situaciones del sector activo (o de ?track=<slug>), con tu progreso en cada una.
 app.get('/situations', async (req, res) => {
   try {
+    const sector = req.query.track ? null : await sectorDe(await idiomaDe(req));
     const { rows } = await db(
       `SELECT s.*,
               COALESCE(sp.practiced_count, 0) AS practiced_count,
@@ -1090,11 +1265,9 @@ app.get('/situations', async (req, res) => {
          JOIN tracks t ON t.id = s.track_id
          LEFT JOIN situation_progress sp
                 ON sp.situation_id = s.id AND sp.profile_id = $1
-        WHERE t.slug = COALESCE($2, (SELECT tr.slug FROM profiles p
-                                       JOIN tracks tr ON tr.id = p.track_id
-                                      WHERE p.id = $1))
+        WHERE t.slug = COALESCE($2, $3)
         ORDER BY s.order_index`,
-      [PROFILE_ID, req.query.track || null]
+      [PROFILE_ID, req.query.track || null, sector?.slug || null]
     );
     res.json(rows);
   } catch (e) { fallo(res, e); }
@@ -1104,7 +1277,7 @@ app.get('/situations', async (req, res) => {
 app.get('/situations/:id', async (req, res) => {
   try {
     const { rows: sit } = await db(
-      `SELECT s.*, t.slug AS track_slug, t.name AS track_name
+      `SELECT s.*, t.slug AS track_slug, t.name AS track_name, t.lang
          FROM situations s JOIN tracks t ON t.id = s.track_id
         WHERE s.id = $1`, [req.params.id]
     );
@@ -1120,7 +1293,9 @@ app.get('/situations/:id', async (req, res) => {
       [req.params.id, PROFILE_ID]
     );
 
-    await conFigurada(lines, 'en');
+    // La columna se llama `en` por herencia, pero guarda el texto en el idioma
+    // del sector: en la Suiza romanda es francés, y ahí no hay figurada.
+    await figurarSi(sit[0].lang, lines, 'en');
 
     // Cuántas frases entran en una tanda. Va en config para poder moverlo sin
     // desplegar: doce frases seguidas con micrófono era lo que hacía que nadie
@@ -1169,8 +1344,8 @@ app.post('/situations/:id/practice', async (req, res) => {
         [PROFILE_ID, todayStr(), score]
       );
       await db(
-        `INSERT INTO daily_goals (profile_id, date, speaking_done)
-         VALUES ($1, $2, TRUE)
+        `INSERT INTO daily_goals (profile_id, date, speaking_done, vocab_target)
+         VALUES ($1, $2, TRUE, ${SQL_META_VOCAB})
          ON CONFLICT (profile_id, date) DO UPDATE SET speaking_done = TRUE`,
         [PROFILE_ID, todayStr()]
       );
@@ -1189,11 +1364,12 @@ app.post('/situations/:id/practice', async (req, res) => {
 app.get('/listening/tasks', async (req, res) => {
   try {
     const { rows } = await db(
-      `SELECT t.id, t.slug, t.part, t.title, t.intro, t.audio_url, t.speaker, t.level,
+      `SELECT t.id, t.slug, t.part, t.title, t.intro, t.audio_url, t.speaker, t.level, t.lang,
               COUNT(q.id)::int AS questions
          FROM listening_tasks t
          LEFT JOIN exam_questions q ON q.listening_id = t.id
-        GROUP BY t.id ORDER BY t.part`
+        WHERE t.lang = $1
+        GROUP BY t.id ORDER BY t.level, t.part, t.id`, [await idiomaDe(req)]
     );
     res.json(rows);
   } catch (e) { fallo(res, e); }
@@ -1218,10 +1394,14 @@ app.get('/listening/task/:slug', async (req, res) => {
 // ════════════════════════════════════════════════════════
 app.get('/writing/tasks', async (req, res) => {
   try {
+    // Del idioma activo, y de menos a más nivel: en francés van primero los
+    // correos que hacen falta el primer mes y al final el formato del DALF.
     const { rows } = await db(
       `SELECT t.*, (SELECT COUNT(*)::int FROM writing_submissions s
                      WHERE s.task_id = t.id AND s.profile_id = $1) AS attempts
-         FROM writing_tasks t ORDER BY t.part, t.id`, [PROFILE_ID]
+         FROM writing_tasks t
+        WHERE t.lang = $2
+        ORDER BY t.nivel, t.part, t.id`, [PROFILE_ID, await idiomaDe(req)]
     );
     res.json(rows);
   } catch (e) { fallo(res, e); }
@@ -1248,14 +1428,18 @@ app.post('/writing/submissions', async (req, res) => {
       [PROFILE_ID, task_id, body, words,
        content ?? null, achievement ?? null, organisation ?? null, language ?? null, notes || null]
     );
-    // Si se ha autopuntuado, cuenta como intento de la destreza
+    // Si se ha autopuntuado, cuenta como intento de la destreza — pero sólo
+    // si la tarea es de nivel de examen (C1). Un 18/20 en un correo de B1 a la
+    // régie no dice que escribas en C1, y contarlo haría que la cabecera se
+    // inventase un nivel. La nota va con el idioma de la tarea.
+    const { rows: [tarea] } = await db('SELECT lang, nivel FROM writing_tasks WHERE id=$1', [task_id]);
     const criterios = [content, achievement, organisation, language].filter((v) => v != null);
-    if (criterios.length === 4) {
+    if (criterios.length === 4 && tarea?.nivel === 'C1') {
       const total = criterios.reduce((a, b) => a + b, 0);
       await db(
-        `INSERT INTO exam_attempts (profile_id, date, section, score, max_score, notes)
-         VALUES ($1,$2,'writing',$3,20,$4)`,
-        [PROFILE_ID, todayStr(), total, `Writing · ${words} palabras`]
+        `INSERT INTO exam_attempts (profile_id, date, section, score, max_score, notes, lang)
+         VALUES ($1,$2,'writing',$3,20,$4,$5)`,
+        [PROFILE_ID, todayStr(), total, `Writing · ${words} palabras`, tarea.lang]
       );
     }
     await db(
@@ -1283,7 +1467,8 @@ app.get('/writing/submissions', async (req, res) => {
 // ════════════════════════════════════════════════════════
 app.get('/speaking/tasks', async (req, res) => {
   try {
-    const { rows } = await db('SELECT * FROM speaking_tasks ORDER BY part, id');
+    const { rows } = await db(
+      'SELECT * FROM speaking_tasks WHERE lang = $1 ORDER BY part, nivel, id', [await idiomaDe(req)]);
     res.json(rows);
   } catch (e) { fallo(res, e); }
 });
@@ -1403,7 +1588,8 @@ app.post('/pronunciation/contrasts/:slug/result', async (req, res) => {
     );
     // Entrenar el oído cuenta como práctica de speaking del día.
     await db(
-      `INSERT INTO daily_goals (profile_id, date, speaking_done) VALUES ($1, $2, TRUE)
+      `INSERT INTO daily_goals (profile_id, date, speaking_done, vocab_target)
+       VALUES ($1, $2, TRUE, ${SQL_META_VOCAB})
        ON CONFLICT (profile_id, date) DO UPDATE SET speaking_done = TRUE`,
       [PROFILE_ID, todayStr()]
     ).catch(() => {});
@@ -1441,16 +1627,45 @@ app.get('/sesion-diaria', async (req, res) => {
   try {
     const { rows: cfg } = await db("SELECT value FROM config WHERE key='daily_vocab_target'");
     const meta = Math.max(1, parseInt(cfg[0]?.value, 10) || 8);
+    const lang = await idiomaActivo();
+    const hoy  = todayStr();
+    const dia  = tetris.diaDeEstudio();
 
-    // 1. Palabras: las que tocan por FSRS, cortadas por la meta del día.
-    const { rows: palabras } = await db(
+    // 1a. Lo que se ha fallado HOY vuelve en la siguiente ronda.
+    //
+    // FSRS manda una palabra fallada a mañana como pronto, y con una sesión al
+    // día eso bastaba. Con el modo Tetris hay seis rondas al día, y dejar que
+    // una palabra fallada a las 9:00 no vuelva a salir hasta mañana es tirar
+    // cinco oportunidades de aprenderla. Como mucho media ronda, para que las
+    // falladas no se coman las nuevas.
+    const { rows: falladas } = await db(
+      `WITH ultimas AS (
+         SELECT DISTINCT ON (rl.user_word_id) rl.user_word_id, rl.rating
+           FROM review_log rl
+          WHERE rl.profile_id = $1 AND ${tetris.sqlDiaDeEstudio('rl.reviewed_at', '$2')} = $3::date
+          ORDER BY rl.user_word_id, rl.reviewed_at DESC
+       )
+       SELECT uw.id, uw.status, w.word, w.translation, w.example_sentence, w.level, w.category,
+              TRUE AS repetida
+         FROM ultimas u
+         JOIN user_words uw ON uw.id = u.user_word_id
+         JOIN words w ON w.id = uw.word_id
+        WHERE u.rating = 1 AND w.lang = $4
+        ORDER BY uw.id
+        LIMIT $5`, [PROFILE_ID, fechas.ZONA, dia, lang, Math.ceil(meta / 2)]
+    );
+
+    // 1b. El resto, las que tocan por FSRS, hasta completar la meta del día.
+    const { rows: nuevas } = await db(
       `SELECT uw.id, uw.status, w.word, w.translation, w.example_sentence, w.level, w.category
          FROM user_words uw JOIN words w ON w.id = uw.word_id
-        WHERE uw.profile_id = $1 AND uw.next_review_date <= $2
+        WHERE uw.profile_id = $1 AND uw.next_review_date <= $2 AND w.lang = $3
+          AND NOT (uw.id = ANY($4::int[]))
         ORDER BY uw.next_review_date, uw.id
-        LIMIT $3`, [PROFILE_ID, todayStr(), meta]
+        LIMIT $5`, [PROFILE_ID, hoy, lang, falladas.map((f) => f.id), meta - falladas.length]
     );
-    await conFigurada(palabras, 'word');
+    const palabras = [...falladas, ...nuevas];
+    await figurarSi(lang, palabras, 'word');
 
     // 2. Una frase de la situación que toca HOY según el plan de 30 días.
     //
@@ -1459,9 +1674,15 @@ app.get('/sesion-diaria', async (req, res) => {
     // la sesión servía otra cosa. Si el día del plan no tiene situación
     // asignada —o el plan ya se acabó— se cae a la primera sin terminar, que es
     // el comportamiento de siempre.
-    const { rows: sit } = await db(
+    //
+    // Todo dentro del sector del idioma activo: el plan de 30 días es del
+    // inglés, así que en francés se va directo a la primera sin terminar de la
+    // Suiza romanda. Y el día del plan se cuenta desde la fecha del usuario, no
+    // desde el CURRENT_DATE de Postgres, que va en UTC.
+    const sector = await sectorDe(lang);
+    const { rows: sit } = sector ? await db(
       `WITH dia AS (
-         SELECT (CURRENT_DATE - (SELECT value::date FROM config WHERE key='plan_start_date')) + 1 AS n
+         SELECT ($3::date - (SELECT value::date FROM config WHERE key='plan_start_date')) + 1 AS n
        ),
        del_plan AS (
          SELECT s.id, s.title_es, s.title_en, 0 AS prioridad
@@ -1469,19 +1690,21 @@ app.get('/sesion-diaria', async (req, res) => {
            JOIN situations s ON s.id = c.situation_id
            LEFT JOIN situation_progress p ON p.situation_id = s.id AND p.profile_id = $1
           WHERE c.day = (SELECT n FROM dia)
+            AND s.track_id = $2
             AND COALESCE(p.completed, FALSE) = FALSE
        ),
        siguiente AS (
          SELECT s.id, s.title_es, s.title_en, 1 AS prioridad
            FROM situations s
            LEFT JOIN situation_progress p ON p.situation_id = s.id AND p.profile_id = $1
-          WHERE COALESCE(p.completed, FALSE) = FALSE
+          WHERE s.track_id = $2
+            AND COALESCE(p.completed, FALSE) = FALSE
           ORDER BY s.order_index LIMIT 1
        )
        SELECT id, title_es, title_en FROM (
          SELECT * FROM del_plan UNION ALL SELECT * FROM siguiente
-       ) t ORDER BY prioridad LIMIT 1`, [PROFILE_ID]
-    );
+       ) t ORDER BY prioridad LIMIT 1`, [PROFILE_ID, sector.id, hoy]
+    ) : { rows: [] };
     let frase = null;
     if (sit.length) {
       const { rows: lineas } = await db(
@@ -1491,36 +1714,40 @@ app.get('/sesion-diaria', async (req, res) => {
       if (lineas.length) {
         // Rota por día del usuario: con getDate() del servidor, la frase de la
         // sesión cambiaba a las 2 de la madrugada en vez de a medianoche.
-        const diaDelMes = Number(todayStr().split('-')[2]);
+        const diaDelMes = Number(hoy.split('-')[2]);
         const elegida = lineas[diaDelMes % lineas.length];
-        await conFigurada([elegida], 'en');
+        await figurarSi(lang, [elegida], 'en');
         frase = { ...elegida, situacion: sit[0] };
       }
     }
 
-    // 3. Un contraste de pronunciación: el menos dominado que haya.
-    const { rows: contraste } = await db(
+    // 3. Un contraste de pronunciación: el menos dominado que haya. Los pares
+    //    mínimos son del inglés; en francés este tramo no sale.
+    const { rows: contraste } = lang === 'en' ? await db(
       `SELECT c.slug, c.titulo_es, c.figurada_a, c.figurada_b
          FROM pron_contrasts c
          LEFT JOIN pron_progress p ON p.contrast_id = c.id AND p.profile_id = $1
         ORDER BY COALESCE(p.mejor_pct, -1), c.orden LIMIT 1`, [PROFILE_ID]
-    );
+    ) : { rows: [] };
 
-    const { rows: hoy } = await db(
-      'SELECT * FROM daily_goals WHERE profile_id=$1 AND date=$2', [PROFILE_ID, todayStr()]);
+    const { rows: goal } = await db(
+      'SELECT * FROM daily_goals WHERE profile_id=$1 AND date=$2', [PROFILE_ID, hoy]);
 
     res.json({
+      idioma: lang,
       meta,
       palabras,
       frase,
       contraste: contraste[0] || null,
       pendientes_totales: (await db(
-        'SELECT count(*)::int AS n FROM user_words WHERE profile_id=$1 AND next_review_date<=$2',
-        [PROFILE_ID, todayStr()])).rows[0].n,
-      ya_hecha: !!hoy[0] && (Number(hoy[0].vocab_done) > 0 || hoy[0].speaking_done === true),
+        `SELECT count(*)::int AS n FROM user_words uw JOIN words w ON w.id = uw.word_id
+          WHERE uw.profile_id=$1 AND uw.next_review_date<=$2 AND w.lang=$3`,
+        [PROFILE_ID, hoy, lang])).rows[0].n,
+      ya_hecha: !!goal[0] && (Number(goal[0].vocab_done) > 0 || goal[0].speaking_done === true),
     });
   } catch (e) { fallo(res, e); }
 });
+
 
 // POST /sesion-diaria/fin — cerrar la sesión del día
 app.post('/sesion-diaria/fin', async (req, res) => {
@@ -1537,8 +1764,8 @@ app.post('/sesion-diaria/fin', async (req, res) => {
     // El índice único es (profile_id, date): nombrarlo entero, como manda la
     // migración 07. Con solo (date) esto reventaría.
     await db(
-      `INSERT INTO daily_goals (profile_id, date, vocab_done)
-       VALUES ($1, $2, $3)
+      `INSERT INTO daily_goals (profile_id, date, vocab_done, vocab_target)
+       VALUES ($1, $2, $3, ${SQL_META_VOCAB})
        ON CONFLICT (profile_id, date) DO UPDATE SET
          vocab_done = GREATEST(daily_goals.vocab_done, EXCLUDED.vocab_done)`,
       [PROFILE_ID, todayStr(), aciertos]
@@ -1561,9 +1788,435 @@ app.post('/sesion-diaria/fin', async (req, res) => {
     await db(
       `INSERT INTO study_sessions (profile_id, date, type, duration_minutes, notes)
        VALUES ($1,$2,'vocab',5,'Sesión diaria')`, [PROFILE_ID, todayStr()]);
+
+    // Cada sesión terminada es una ronda del modo Tetris, en el día de estudio
+    // (que va de 05:00 a 05:00) y en el idioma en el que se ha hecho.
+    const { rows: td } = await db(
+      `INSERT INTO tetris_dias (profile_id, fecha, lang, rondas) VALUES ($1, $2, $3, 1)
+       ON CONFLICT (profile_id, fecha, lang) DO UPDATE SET rondas = tetris_dias.rondas + 1
+       RETURNING rondas`, [PROFILE_ID, tetris.diaDeEstudio(), await idiomaActivo()]);
+
     await addXp(aciertos * 5 + (frase ? 10 : 0));
     const racha = await recomputeStreak(todayStr());
-    res.json({ ok: true, racha });
+    res.json({ ok: true, racha, rondas: td[0]?.rondas || 1 });
+  } catch (e) { fallo(res, e); }
+});
+
+// ════════════════════════════════════════════════════════
+// IDIOMA — inglés o francés
+// ════════════════════════════════════════════════════════
+
+// GET /idioma — el idioma activo y lo que el cliente necesita para pintarlo
+app.get('/idioma', async (req, res) => {
+  try {
+    const c = await leerConfig(['idioma_activo', 'tetris_activo']);
+    res.json({
+      idioma: normalizarIdioma(c.idioma_activo),
+      idiomas: IDIOMAS,
+      tetris_activo: c.tetris_activo !== '0',
+    });
+  } catch (e) { fallo(res, e); }
+});
+
+// PUT /idioma — cambiar de idioma. body: { idioma: 'en' | 'fr' }
+app.put('/idioma', async (req, res) => {
+  const idioma = req.body?.idioma;
+  if (!esIdioma(idioma)) return res.status(400).json({ error: 'Idioma no válido' });
+  try {
+    await db(`INSERT INTO config (key, value) VALUES ('idioma_activo', $1)
+              ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [idioma]);
+    res.json({ ok: true, idioma });
+  } catch (e) { fallo(res, e); }
+});
+
+// ════════════════════════════════════════════════════════
+// PLAN DEL FRANCÉS — por fases, no por días
+// ════════════════════════════════════════════════════════
+// Ver lib/fases.js: tres fases con objetivos medibles, sin calendario. Se pasa
+// de una a otra cuando los datos lo dicen.
+app.get('/plan/fases', async (req, res) => {
+  try {
+    const [pal, sit, gram, esc, comp] = await Promise.all([
+      db(`SELECT w.category, count(*)::int AS total,
+                 count(*) FILTER (WHERE uw.stability >= 7)::int AS consolidadas,
+                 count(*) FILTER (WHERE uw.reps > 0)::int AS vistas
+            FROM words w
+            JOIN user_words uw ON uw.word_id = w.id AND uw.profile_id = $1
+           WHERE w.lang = 'fr'
+           GROUP BY w.category`, [PROFILE_ID]),
+      db(`SELECT s.level, count(*)::int AS total,
+                 count(*) FILTER (WHERE COALESCE(p.completed, FALSE))::int AS hechas
+            FROM situations s
+            JOIN tracks t ON t.id = s.track_id AND t.lang = 'fr'
+            LEFT JOIN situation_progress p ON p.situation_id = s.id AND p.profile_id = $1
+           GROUP BY s.level`, [PROFILE_ID]),
+      db(`SELECT g.level, count(*)::int AS total,
+                 count(*) FILTER (WHERE COALESCE(p.completed, FALSE))::int AS hechas
+            FROM grammar_topics g
+            LEFT JOIN grammar_progress p ON p.topic_id = g.id AND p.profile_id = $1
+           WHERE g.lang = 'fr'
+           GROUP BY g.level`, [PROFILE_ID]),
+      // Tareas escritas: las prácticas cuentan con haberlas escrito una vez;
+      // las del DALF, sólo si además se han autoevaluado con los 4 criterios.
+      db(`SELECT (t.nivel = 'C1') AS dalf, count(*)::int AS total,
+                 count(*) FILTER (WHERE EXISTS (
+                   SELECT 1 FROM writing_submissions s
+                    WHERE s.task_id = t.id AND s.profile_id = $1
+                      AND (t.nivel <> 'C1' OR (s.content IS NOT NULL AND s.achievement IS NOT NULL
+                           AND s.organisation IS NOT NULL AND s.language IS NOT NULL))
+                 ))::int AS hechas
+            FROM writing_tasks t
+           WHERE t.lang = 'fr'
+           GROUP BY 1`, [PROFILE_ID]),
+      // Comprensión: de las dos pruebas, cuántas tienen algún intento con un
+      // 50 % o más. Sólo los textos y audios C1 dejan intento (los B1 y B2 son
+      // práctica), así que esto ya es "un C1 aprobado".
+      db(`SELECT count(DISTINCT section)::int AS hechas
+            FROM exam_attempts
+           WHERE profile_id = $1 AND lang = 'fr' AND section IN ('listening','reading')
+             AND score::float / NULLIF(max_score, 0) >= 0.5`, [PROFILE_ID]),
+    ]);
+    const porClave = (rows, clave) => Object.fromEntries(rows.map((r) => [r[clave], r]));
+    const palabras = porClave(pal.rows, 'category');
+    res.json({
+      fases: fasesFrances({
+        palabras,
+        situaciones: porClave(sit.rows, 'level'),
+        gramatica: porClave(gram.rows, 'level'),
+        correos: esc.rows.find((r) => !r.dalf),
+        dalf:    esc.rows.find((r) => r.dalf),
+        comprension: { total: 2, hechas: comp.rows[0]?.hechas || 0 },
+      }),
+      vistas: pal.rows.reduce((a, r) => a + r.vistas, 0),
+      total: pal.rows.reduce((a, r) => a + r.total, 0),
+    });
+  } catch (e) { fallo(res, e); }
+});
+
+// ════════════════════════════════════════════════════════
+// MODO TETRIS — día intenso, repaso de almohada y pistas de noche
+// ════════════════════════════════════════════════════════
+// Toda la lógica que se puede probar sin base de datos está en lib/tetris.js,
+// con el porqué de cada decisión. Aquí sólo se lee y se guarda.
+
+const SQL_DIA_RL = tetris.sqlDiaDeEstudio('rl.reviewed_at', '$2');
+
+/** Las palabras (ids de user_words) repasadas en un día de estudio. */
+async function palabrasDelDia(lang, dia) {
+  const { rows } = await db(
+    `SELECT DISTINCT uw.id, uw.difficulty, w.word, w.translation, w.example_sentence
+       FROM review_log rl
+       JOIN user_words uw ON uw.id = rl.user_word_id
+       JOIN words w ON w.id = uw.word_id
+      WHERE rl.profile_id = $1 AND ${SQL_DIA_RL} = $3::date AND w.lang = $4`,
+    [PROFILE_ID, fechas.ZONA, dia, lang]);
+  return rows;
+}
+
+/**
+ * El test del despertar pendiente: la noche del día de estudio ANTERIOR con
+ * palabras aún sin probar. Sólo la de ayer: una noche de hace tres días ya no
+ * mide lo que dejó el sueño, mide lo que quedó después de tres días.
+ */
+async function despertarPendiente(lang, dia = tetris.diaDeEstudio()) {
+  const { rows } = await db(
+    `SELECT n.id, n.fecha::text AS fecha, n.pistas, count(*)::int AS n
+       FROM noches n JOIN noche_palabras np ON np.noche_id = n.id
+      WHERE n.profile_id = $1 AND n.lang = $2 AND n.fecha = $3::date - 1
+        AND np.recordada IS NULL
+      GROUP BY n.id`, [PROFILE_ID, lang, dia]);
+  return rows[0] || null;
+}
+
+/** Filas ya probadas de todas las noches, para comparar grupos. */
+async function resumenTetris(lang) {
+  const { rows } = await db(
+    `SELECT np.noche_id, n.pistas, np.con_pista, np.recordada
+       FROM noche_palabras np JOIN noches n ON n.id = np.noche_id
+      WHERE n.profile_id = $1 AND n.lang = $2 AND np.recordada IS NOT NULL`,
+    [PROFILE_ID, lang]);
+  const r = tetris.resumenNoches(rows);
+  return { ...r, veredicto: tetris.veredicto(r) };
+}
+
+const CLAVES_TETRIS = ['tetris_activo', 'tetris_rondas', 'tetris_hora_manana', 'tetris_hora_almohada',
+                       'noche_espera_min', 'noche_duracion_min', 'noche_intervalo_s', 'noche_volumen'];
+
+/** Ajustes del modo noche, con límites: un intervalo de 0 s sería una ráfaga. */
+function ajustesNoche(c) {
+  const num = (v, def, min, max) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : def;
+  };
+  return {
+    espera_min:   num(c.noche_espera_min, 30, 0, 120),
+    duracion_min: num(c.noche_duracion_min, 90, 10, 240),
+    intervalo_s:  num(c.noche_intervalo_s, 6, 3, 30),
+    volumen:      num(c.noche_volumen, 0.35, 0.05, 1),
+  };
+}
+
+// GET /tetris/hoy — el estado del día y qué toca ahora
+app.get('/tetris/hoy', async (req, res) => {
+  try {
+    const lang = await idiomaActivo();
+    const dia  = tetris.diaDeEstudio();
+    const c    = await leerConfig(CLAVES_TETRIS);
+    const [td, pal, noche, pend, resultados, anoche] = await Promise.all([
+      db('SELECT rondas, almohada_at FROM tetris_dias WHERE profile_id=$1 AND fecha=$2 AND lang=$3',
+         [PROFILE_ID, dia, lang]),
+      db(`SELECT count(DISTINCT rl.user_word_id)::int AS n
+            FROM review_log rl JOIN user_words uw ON uw.id = rl.user_word_id
+            JOIN words w ON w.id = uw.word_id
+           WHERE rl.profile_id = $1 AND ${SQL_DIA_RL} = $3::date AND w.lang = $4`,
+         [PROFILE_ID, fechas.ZONA, dia, lang]),
+      db(`SELECT n.id, n.empezada, n.terminada, n.pistas,
+                 count(*) FILTER (WHERE np.con_pista)::int AS con_pista,
+                 count(*) FILTER (WHERE NOT np.con_pista)::int AS control
+            FROM noches n LEFT JOIN noche_palabras np ON np.noche_id = n.id
+           WHERE n.profile_id=$1 AND n.fecha=$2 AND n.lang=$3
+           GROUP BY n.id`, [PROFILE_ID, dia, lang]),
+      despertarPendiente(lang, dia),
+      resumenTetris(lang),
+      // Cómo fue el test de la noche de ayer, para enseñarlo hecho en HOY.
+      db(`SELECT n.id, n.pistas, count(*)::int AS total,
+                 count(np.recordada)::int AS probadas,
+                 count(*) FILTER (WHERE np.recordada = 2)::int AS primera
+            FROM noches n JOIN noche_palabras np ON np.noche_id = n.id
+           WHERE n.profile_id=$1 AND n.lang=$2 AND n.fecha = $3::date - 1
+           GROUP BY n.id`, [PROFILE_ID, lang, dia]),
+    ]);
+
+    const rondas      = td.rows[0]?.rondas || 0;
+    const metaRondas  = Math.max(1, parseInt(c.tetris_rondas, 10) || 6);
+    const palabrasHoy = pal.rows[0]?.n || 0;
+    const horaAlmohada = c.tetris_hora_almohada || '22:30';
+
+    const fase = tetris.faseTetris({
+      minutos: fechas.minutosEnZona(),
+      despertarPendiente: !!pend,
+      rondas,
+      metaRondas,
+      almohadaHecha: !!td.rows[0]?.almohada_at,
+      nocheEmpezada: !!noche.rows[0],
+      minAlmohada: tetris.minutosDeHora(horaAlmohada),
+      palabrasHoy,
+    });
+
+    res.json({
+      activo: c.tetris_activo !== '0',
+      idioma: lang,
+      dia,
+      rondas,
+      meta_rondas: metaRondas,
+      palabras_hoy: palabrasHoy,
+      almohada_hecha: !!td.rows[0]?.almohada_at,
+      hora_almohada: horaAlmohada,
+      hora_manana: c.tetris_hora_manana || '08:00',
+      noche: noche.rows[0] || null,
+      anoche: anoche.rows[0] || null,
+      despertar: pend,
+      ajustes_noche: ajustesNoche(c),
+      resultados,
+      ...fase,
+    });
+  } catch (e) { fallo(res, e); }
+});
+
+// GET /tetris/almohada — las palabras de hoy para el último repaso
+app.get('/tetris/almohada', async (req, res) => {
+  try {
+    const lang = await idiomaActivo();
+    const palabras = await palabrasDelDia(lang, tetris.diaDeEstudio());
+    // Barajadas, y con tope: el repaso de almohada es un último vistazo, no
+    // otra sesión de media hora que quite sueño.
+    palabras.sort(() => Math.random() - 0.5);
+    res.json({ idioma: lang, palabras: palabras.slice(0, 40), total: palabras.length });
+  } catch (e) { fallo(res, e); }
+});
+
+// POST /tetris/almohada — repaso de almohada hecho
+app.post('/tetris/almohada', async (req, res) => {
+  try {
+    const lang = await idiomaActivo();
+    await db(
+      `INSERT INTO tetris_dias (profile_id, fecha, lang, almohada_at) VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (profile_id, fecha, lang) DO UPDATE SET almohada_at = NOW()`,
+      [PROFILE_ID, tetris.diaDeEstudio(), lang]);
+    await addXp(10);
+    res.json({ ok: true });
+  } catch (e) { fallo(res, e); }
+});
+
+// POST /tetris/noche — abre (o recupera) la noche de hoy y da las pistas
+//
+// El sorteo se hace UNA vez por noche. Reabrir el modo noche devuelve el mismo
+// reparto: volver a sortear dejaría palabras que ya sonaron en el grupo de
+// control, y la comparación de la mañana no valdría nada. Por la misma razón,
+// lo que se estudie después de abrir la noche ya no entra en ella.
+app.post('/tetris/noche', async (req, res) => {
+  try {
+    const lang = await idiomaActivo();
+    const dia  = tetris.diaDeEstudio();
+
+    let { rows: [noche] } = await db(
+      'SELECT id, fecha::text AS fecha, pistas FROM noches WHERE profile_id=$1 AND fecha=$2 AND lang=$3',
+      [PROFILE_ID, dia, lang]);
+
+    if (!noche) {
+      const palabras = await palabrasDelDia(lang, dia);
+      if (!palabras.length) {
+        return res.status(409).json({
+          error: 'Hoy no has estudiado ninguna palabra: sin eso no hay nada que repasar de noche. Haz una ronda primero.',
+        });
+      }
+      const { conPista, control } = tetris.repartirPistas(
+        palabras.map((p) => ({ id: p.id, peso: Number(p.difficulty) || 5 })));
+
+      const cli = await pool.connect();
+      try {
+        await cli.query('BEGIN');
+        const { rows: nueva } = await cli.query(
+          `INSERT INTO noches (profile_id, fecha, lang) VALUES ($1, $2, $3)
+           ON CONFLICT (profile_id, fecha, lang) DO NOTHING
+           RETURNING id, fecha::text AS fecha, pistas`, [PROFILE_ID, dia, lang]);
+        if (nueva.length) {
+          noche = nueva[0];
+          await cli.query(
+            `INSERT INTO noche_palabras (noche_id, user_word_id, con_pista)
+             SELECT $1::int, unnest($2::int[]), TRUE
+             UNION ALL
+             SELECT $1::int, unnest($3::int[]), FALSE`,
+            [noche.id, conPista.map((p) => p.id), control.map((p) => p.id)]);
+        }
+        await cli.query('COMMIT');
+      } catch (e) {
+        await cli.query('ROLLBACK').catch(() => {});
+        throw e;
+      } finally {
+        cli.release();
+      }
+      // Dos pestañas a la vez: la otra ganó la carrera y ya hizo el sorteo.
+      if (!noche) {
+        ({ rows: [noche] } = await db(
+          'SELECT id, fecha::text AS fecha, pistas FROM noches WHERE profile_id=$1 AND fecha=$2 AND lang=$3',
+          [PROFILE_ID, dia, lang]));
+      }
+    }
+
+    // Sólo la palabra extranjera: la traducción NO se manda a propósito. Oírla
+    // detrás de la pista anula el efecto en los estudios que lo han medido.
+    const { rows: pistas } = await db(
+      `SELECT uw.id, w.word
+         FROM noche_palabras np
+         JOIN user_words uw ON uw.id = np.user_word_id
+         JOIN words w ON w.id = uw.word_id
+        WHERE np.noche_id = $1 AND np.con_pista
+        ORDER BY random()`, [noche.id]);
+    const { rows: [ctl] } = await db(
+      'SELECT count(*)::int AS n FROM noche_palabras WHERE noche_id = $1 AND NOT con_pista', [noche.id]);
+
+    res.json({
+      idioma: lang,
+      noche,
+      pistas,
+      n_control: ctl.n,
+      ajustes: ajustesNoche(await leerConfig(CLAVES_TETRIS)),
+    });
+  } catch (e) { fallo(res, e); }
+});
+
+// POST /tetris/noche/:id/progreso — cuántas pistas han sonado de verdad
+// body: { nuevas: n, terminada: bool }. Se manda por tandas durante la noche:
+// si el móvil se apaga a las tres, lo sonado hasta entonces queda apuntado.
+app.post('/tetris/noche/:id/progreso', async (req, res) => {
+  const nuevas = Math.max(0, Math.min(5000, parseInt(req.body?.nuevas, 10) || 0));
+  const terminada = req.body?.terminada === true;
+  try {
+    const { rows } = await db(
+      `UPDATE noches SET pistas = pistas + $2,
+                         terminada = CASE WHEN $3 THEN NOW() ELSE terminada END
+        WHERE id = $1 AND profile_id = $4
+        RETURNING id, pistas, terminada`, [req.params.id, nuevas, terminada, PROFILE_ID]);
+    if (!rows.length) return res.status(404).json({ error: 'No encontrada' });
+    res.json(rows[0]);
+  } catch (e) { fallo(res, e); }
+});
+
+// GET /tetris/despertar — el test de la mañana, A CIEGAS
+// No se dice qué palabras sonaron por la noche: saberlo cambia cómo se juzga
+// uno mismo, y el test es precisamente para comparar los dos grupos.
+app.get('/tetris/despertar', async (req, res) => {
+  try {
+    const lang = await idiomaActivo();
+    const pend = await despertarPendiente(lang);
+    if (!pend) return res.json({ idioma: lang, noche: null, palabras: [] });
+    const { rows } = await db(
+      `SELECT uw.id, w.word, w.translation, w.example_sentence
+         FROM noche_palabras np
+         JOIN user_words uw ON uw.id = np.user_word_id
+         JOIN words w ON w.id = uw.word_id
+        WHERE np.noche_id = $1 AND np.recordada IS NULL
+        ORDER BY random()`, [pend.id]);
+    res.json({ idioma: lang, noche: pend, palabras: rows });
+  } catch (e) { fallo(res, e); }
+});
+
+// POST /tetris/despertar — resultados del test
+// body: { noche_id, resultados: [{ id, recordada: 0|1|2 }] }
+app.post('/tetris/despertar', async (req, res) => {
+  const nocheId = parseInt(req.body?.noche_id, 10);
+  const resultados = (Array.isArray(req.body?.resultados) ? req.body.resultados : [])
+    .map((r) => ({ id: parseInt(r?.id, 10), recordada: parseInt(r?.recordada, 10) }))
+    .filter((r) => Number.isInteger(r.id) && [0, 1, 2].includes(r.recordada));
+  if (!Number.isInteger(nocheId) || !resultados.length) {
+    return res.status(400).json({ error: 'Faltan resultados' });
+  }
+  try {
+    const lang = await idiomaActivo();
+    const { rows: [noche] } = await db(
+      'SELECT id, pistas FROM noches WHERE id = $1 AND profile_id = $2', [nocheId, PROFILE_ID]);
+    if (!noche) return res.status(404).json({ error: 'Noche no encontrada' });
+
+    for (const r of resultados) {
+      const { rowCount } = await db(
+        `UPDATE noche_palabras SET recordada = $3, probada_at = NOW()
+          WHERE noche_id = $1 AND user_word_id = $2 AND recordada IS NULL`,
+        [nocheId, r.id, r.recordada]);
+      // El test es también un repaso de verdad: no salía → otra vez, con
+      // dudas → difícil, a la primera → bien. Sólo si la fila era de esta
+      // noche y estaba sin probar, para no repasar dos veces por un reenvío.
+      if (rowCount) await repasarPalabra(r.id, [1, 2, 3][r.recordada]);
+    }
+    await addXp(resultados.length * 2);
+
+    // Ahora sí se destapa qué sonó y qué no: el test ya está hecho.
+    const { rows } = await db(
+      `SELECT np.noche_id, $2::int AS pistas, np.con_pista, np.recordada
+         FROM noche_palabras np WHERE np.noche_id = $1 AND np.recordada IS NOT NULL`,
+      [nocheId, noche.pistas]);
+    const estaNoche = tetris.resumenNoches(rows, { minPistas: 0, minNoches: 1 });
+    res.json({
+      pistas: noche.pistas,
+      esta_noche: estaNoche,
+      acumulado: await resumenTetris(lang),
+    });
+  } catch (e) { fallo(res, e); }
+});
+
+// GET /tetris/resultados — el experimento completo
+app.get('/tetris/resultados', async (req, res) => {
+  try {
+    const lang = await idiomaDe(req);
+    const { rows: noches } = await db(
+      `SELECT n.id, n.fecha::text AS fecha, n.pistas,
+              count(*) FILTER (WHERE np.con_pista)::int AS con_pista,
+              count(*) FILTER (WHERE NOT np.con_pista)::int AS control,
+              count(np.recordada)::int AS probadas
+         FROM noches n LEFT JOIN noche_palabras np ON np.noche_id = n.id
+        WHERE n.profile_id = $1 AND n.lang = $2
+        GROUP BY n.id ORDER BY n.fecha DESC LIMIT 30`, [PROFILE_ID, lang]);
+    res.json({ idioma: lang, resumen: await resumenTetris(lang), noches });
   } catch (e) { fallo(res, e); }
 });
 
@@ -1661,17 +2314,21 @@ async function limpiarCaducadas(endpoints) {
 
 /** Reúne lo que hay pendiente hoy para que el aviso diga algo concreto. */
 async function datosDelAviso() {
+  const lang = await idiomaActivo();
+  const sector = await sectorDe(lang);
   const [pend, meta, sit, goal] = await Promise.all([
-    db('SELECT count(*)::int AS n FROM user_words WHERE profile_id=$1 AND next_review_date<=$2',
-       [PROFILE_ID, todayStr()]),
+    db(`SELECT count(*)::int AS n FROM user_words uw JOIN words w ON w.id = uw.word_id
+         WHERE uw.profile_id=$1 AND uw.next_review_date<=$2 AND w.lang=$3`,
+       [PROFILE_ID, todayStr(), lang]),
     db("SELECT value FROM config WHERE key='daily_vocab_target'"),
     db(`SELECT s.title_es FROM situations s
          LEFT JOIN situation_progress p ON p.situation_id=s.id AND p.profile_id=$1
-        WHERE COALESCE(p.completed,FALSE)=FALSE
-        ORDER BY s.order_index LIMIT 1`, [PROFILE_ID]),
+        WHERE COALESCE(p.completed,FALSE)=FALSE AND s.track_id = $2
+        ORDER BY s.order_index LIMIT 1`, [PROFILE_ID, sector?.id ?? null]),
     db('SELECT streak FROM daily_goals WHERE profile_id=$1 ORDER BY date DESC LIMIT 1', [PROFILE_ID]),
   ]);
   return {
+    idioma:     lang,
     pendientes: pend.rows[0].n,
     meta:       parseInt(meta.rows[0]?.value, 10) || 8,
     situacion:  sit.rows[0]?.title_es || null,
@@ -1693,13 +2350,13 @@ async function datosDelAviso() {
  * exactamente la misma fila vacía con enviados=0, y desde fuera no había forma
  * de distinguir un día bien resuelto de uno roto.
  */
-function registrarAviso(fecha, titulo, cuerpo, enviados) {
+function registrarAviso(fecha, titulo, cuerpo, enviados, tipo = 'diario') {
   return db(
     `INSERT INTO push_log (profile_id, fecha, tipo, titulo, cuerpo, enviados)
-     VALUES ($1, $2, 'diario', $3, $4, $5)
+     VALUES ($1, $2, $6, $3, $4, $5)
      ON CONFLICT (profile_id, fecha, tipo) DO UPDATE
        SET titulo = EXCLUDED.titulo, cuerpo = EXCLUDED.cuerpo, enviados = EXCLUDED.enviados`,
-    [PROFILE_ID, fecha, titulo, cuerpo, enviados]);
+    [PROFILE_ID, fecha, titulo, cuerpo, enviados, tipo]);
 }
 
 // Un envío lento no puede solaparse con el tic siguiente. Antes esto lo cubría
@@ -1716,44 +2373,97 @@ function arrancarPlanificador() {
     if (_avisoEnCurso) return;
     _avisoEnCurso = true;
     try {
-      const { rows: cfg } = await db("SELECT value FROM config WHERE key='push_hora'");
-      if (!avisos.tocaAvisar(cfg[0]?.value || '20:30')) return;
-
-      const hoy = todayStr();
-
-      // ¿Ya se resolvió el aviso de hoy? Se CONSULTA, no se reserva. Reservar
-      // antes de enviar significaba que un fallo de red se llevaba por delante
-      // el aviso del día entero: la fila ya existía, así que el reintento del
-      // minuto siguiente se daba por hecho y nadie recibía nada.
-      const { rows: yaHay } = await db(
-        "SELECT 1 FROM push_log WHERE profile_id=$1 AND fecha=$2 AND tipo='diario'", [PROFILE_ID, hoy]);
-      if (yaHay.length) return;
-
-      // Si ya ha estudiado hoy, no se le da la lata.
-      const { rows: hecho } = await db(
-        `SELECT 1 FROM daily_goals WHERE profile_id=$1 AND date=$2
-           AND (vocab_done>0 OR grammar_done OR speaking_done)`, [PROFILE_ID, hoy]);
-      if (hecho.length) return registrarAviso(hoy, 'sin enviar: ya había estudiado', '', 0);
-
-      const { rows: subs } = await db('SELECT * FROM push_subscriptions WHERE profile_id=$1', [PROFILE_ID]);
-      if (!subs.length) return registrarAviso(hoy, 'sin enviar: ningún dispositivo suscrito', '', 0);
-
-      const payload = { ...avisos.componerAviso(await datosDelAviso()), url: '/?sesion=1' };
-      const { ok, caducadas } = await avisos.enviar(subs, payload);
-      await limpiarCaducadas(caducadas);
-
-      // El candado se pone DESPUÉS de que el envío haya salido. Si no salió, no
-      // se escribe nada y el minuto siguiente lo vuelve a intentar mientras dure
-      // la ventana de 15 minutos.
-      if (!ok) return console.error('[avisos] ningún envío aceptado, se reintenta al minuto');
-      await registrarAviso(hoy, payload.titulo, payload.cuerpo, ok);
-      console.log(`[avisos] enviado a ${ok} dispositivo(s): ${payload.cuerpo}`);
+      const cfg = await leerConfig(['push_hora', 'tetris_activo', 'tetris_hora_manana', 'tetris_hora_almohada']);
+      if (avisos.tocaAvisar(cfg.push_hora || '20:30')) await avisoDiario();
+      // Los dos del modo Tetris. Cada uno con su propio candado en push_log
+      // (tipo distinto), así que ninguno tapa al otro ni al diario.
+      if (cfg.tetris_activo !== '0') {
+        if (avisos.tocaAvisar(cfg.tetris_hora_manana || '08:00'))   await avisoTetris('despertar');
+        if (avisos.tocaAvisar(cfg.tetris_hora_almohada || '22:30')) await avisoTetris('almohada');
+      }
     } catch (e) {
       console.error('[avisos] planificador:', e?.message || e);
     } finally {
       _avisoEnCurso = false;
     }
   }, 60_000);
+}
+
+/** El aviso de siempre: cinco minutos, con lo que toca hoy. */
+async function avisoDiario() {
+  const hoy = todayStr();
+
+  // ¿Ya se resolvió el aviso de hoy? Se CONSULTA, no se reserva. Reservar
+  // antes de enviar significaba que un fallo de red se llevaba por delante
+  // el aviso del día entero: la fila ya existía, así que el reintento del
+  // minuto siguiente se daba por hecho y nadie recibía nada.
+  const { rows: yaHay } = await db(
+    "SELECT 1 FROM push_log WHERE profile_id=$1 AND fecha=$2 AND tipo='diario'", [PROFILE_ID, hoy]);
+  if (yaHay.length) return;
+
+  // Si ya ha estudiado hoy, no se le da la lata.
+  const { rows: hecho } = await db(
+    `SELECT 1 FROM daily_goals WHERE profile_id=$1 AND date=$2
+       AND (vocab_done>0 OR grammar_done OR speaking_done)`, [PROFILE_ID, hoy]);
+  if (hecho.length) return registrarAviso(hoy, 'sin enviar: ya había estudiado', '', 0);
+
+  const { rows: subs } = await db('SELECT * FROM push_subscriptions WHERE profile_id=$1', [PROFILE_ID]);
+  if (!subs.length) return registrarAviso(hoy, 'sin enviar: ningún dispositivo suscrito', '', 0);
+
+  const payload = { ...avisos.componerAviso(await datosDelAviso()), url: '/?sesion=1' };
+  const { ok, caducadas } = await avisos.enviar(subs, payload);
+  await limpiarCaducadas(caducadas);
+
+  // El candado se pone DESPUÉS de que el envío haya salido. Si no salió, no
+  // se escribe nada y el minuto siguiente lo vuelve a intentar mientras dure
+  // la ventana de 15 minutos.
+  if (!ok) return console.error('[avisos] ningún envío aceptado, se reintenta al minuto');
+  await registrarAviso(hoy, payload.titulo, payload.cuerpo, ok);
+  console.log(`[avisos] enviado a ${ok} dispositivo(s): ${payload.cuerpo}`);
+}
+
+/**
+ * Los avisos del modo Tetris: 'despertar' (el test de la mañana) y 'almohada'
+ * (el último repaso y el modo noche). Mismo esquema que el diario: se consulta
+ * el candado, se envía, y sólo si salió se escribe.
+ */
+async function avisoTetris(tipo) {
+  const hoy = todayStr();
+  const { rows: yaHay } = await db(
+    'SELECT 1 FROM push_log WHERE profile_id=$1 AND fecha=$2 AND tipo=$3', [PROFILE_ID, hoy, tipo]);
+  if (yaHay.length) return;
+
+  const lang = await idiomaActivo();
+  const dia  = tetris.diaDeEstudio();
+  let palabras = 0;
+
+  if (tipo === 'despertar') {
+    const pend = await despertarPendiente(lang, dia);
+    if (!pend) return registrarAviso(hoy, 'sin enviar: no hay test pendiente', '', 0, tipo);
+    palabras = pend.n;
+  } else {
+    const { rows: td } = await db(
+      'SELECT almohada_at FROM tetris_dias WHERE profile_id=$1 AND fecha=$2 AND lang=$3',
+      [PROFILE_ID, dia, lang]);
+    if (td[0]?.almohada_at) return registrarAviso(hoy, 'sin enviar: ya había repasado', '', 0, tipo);
+    palabras = (await palabrasDelDia(lang, dia)).length;
+  }
+
+  const { rows: subs } = await db('SELECT * FROM push_subscriptions WHERE profile_id=$1', [PROFILE_ID]);
+  if (!subs.length) return registrarAviso(hoy, 'sin enviar: ningún dispositivo suscrito', '', 0, tipo);
+
+  const payload = {
+    ...avisos.componerAvisoTetris(tipo, { palabras, idioma: lang }),
+    // Sin palabras de hoy, el aviso de la noche propone una ronda: que el
+    // toque abra la ronda y no un repaso vacío.
+    url: tipo === 'almohada' && !palabras ? '/?sesion=1' : `/?tetris=${tipo}`,
+    tag: `tutoringles-${tipo}`,
+  };
+  const { ok, caducadas } = await avisos.enviar(subs, payload);
+  await limpiarCaducadas(caducadas);
+  if (!ok) return console.error(`[avisos] ${tipo}: ningún envío aceptado, se reintenta al minuto`);
+  await registrarAviso(hoy, payload.titulo, payload.cuerpo, ok, tipo);
+  console.log(`[avisos] ${tipo} enviado a ${ok} dispositivo(s): ${payload.cuerpo}`);
 }
 
 // ── Arranque ─────────────────────────────────────────────

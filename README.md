@@ -1,6 +1,9 @@
 # TutorInglés
 
-PWA personal para aprender inglés **del día a día primero, y del examen después**.
+PWA personal para aprender inglés y francés **del día a día primero, y del examen después**.
+Desde septiembre de 2026 el francés (Suiza romanda) va por delante, y hay un **modo Tetris**:
+rondas cortas de día, repaso antes de dormir, pistas de audio durmiendo y un test por la mañana
+que mide si la noche sirve.
 
 > **En producción:** https://tutoringles.tinafusion.com
 
@@ -90,7 +93,13 @@ Docker: postgres:16                   ← base "tutoringles"
 | `src/js/exam.js` | Panel de simulacros + Reading |
 | `src/js/listening.js` | Listening: audio, transcripción y corrección |
 | `src/js/writing.js` | Writing (rúbrica de Cambridge) y Speaking (cronómetro) |
-| `src/js/plan.js` | Plan de 30 días |
+| `src/js/plan.js` | Plan de 30 días (inglés) y plan por fases (francés) |
+| `src/js/tetris.js` | **Modo Tetris**: rondas, almohada, modo noche y test del despertar |
+| `src/js/sons.js` | SONIDOS con el francés: contrastes para hispanohablantes |
+| `lib/tetris.js` | Lógica del modo Tetris (día de estudio, reparto, veredicto) |
+| `lib/fases.js` | Fases del plan del francés |
+| `lib/idiomas.js` | Los dos idiomas |
+| `lib/test-frances.js` | Test de nivel del francés (A2 → C1) |
 | `src/js/progress.js` | Estadísticas y nivel estimado |
 
 ### Migraciones
@@ -117,6 +126,16 @@ docker exec -i postgres psql -U postgres -d tutoringles -v ON_ERROR_STOP=1 < mig
 | `migration_12_iconos.sql` | Los iconos dejan de ser emojis |
 | `migration_13_writing_speaking.sql` | Writing y Speaking C1 |
 | `migration_14_listening.sql` | Listening C1 |
+| `migration_15` … `_23` | Iconos, pronunciación, avisos, pares, tandas, test de nivel |
+| `migration_24_idiomas_y_tetris.sql` | Columna `lang` y tablas del modo Tetris |
+| `migration_25_frances_vocabulario.sql` | 217 palabras y frases de francés |
+| `migration_26_frances_situaciones.sql` | 12 situaciones de la Suiza romanda |
+| `migration_27_frances_gramatica.sql` | 8 lecciones de gramática francesa |
+| `migration_28_ingles_c1.sql` | 116 entradas más de inglés C1 |
+| `migration_29_escribir_y_oral_por_idioma.sql` | Idioma y nivel en tareas y notas |
+| `migration_30_frances_escribir_y_oral.sql` | Correos para Suiza, síntesis y ensayo del DALF, y el oral |
+| `migration_31_comprension_por_idioma_y_sin_fecha.sql` | Idioma en Reading/Listening; el CAE sin fecha |
+| `migration_32_frances_comprension.sql` | Comprensión oral y escrita en francés, B1 → C1 |
 
 **Ojo:** desde la 07, todo el progreso cuelga de `profile_id` y los índices únicos
 son compuestos. Cualquier `ON CONFLICT` nuevo debe nombrar las dos columnas

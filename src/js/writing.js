@@ -11,6 +11,21 @@ let _wrTask   = null;
 let _spTasks  = [];
 let _spTimer  = null;
 
+// Con una tarea en francés, los mismos cuatro números (0-5, se guardan en las
+// mismas columnas) pero con lo que mira un corrector del DALF. El DALF real
+// puntúa cada prueba sobre 25 con una parrilla más larga: esto es una
+// autoevaluación simplificada, y lo dice en pantalla.
+const RUBRICA_FR = [
+  { key: 'content',      nombre: 'Respect de la consigne',
+    desc: '¿Has hecho lo que pedía, con la extensión pedida? En la síntesis: sin opinión propia ni "je".' },
+  { key: 'achievement',  nombre: 'Registre et argumentation',
+    desc: '¿Vous o tu, fórmulas y tono para ese destinatario? En el ensayo: ¿una postura clara y defendida?' },
+  { key: 'organisation', nombre: 'Cohérence et cohésion',
+    desc: '¿Párrafos con una idea cada uno? ¿Conectores (or, néanmoins, dès lors) bien usados?' },
+  { key: 'language',     nombre: 'Lexique et grammaire',
+    desc: '¿Vocabulario preciso y variado? ¿Acentos, concordancias, subjuntivo donde toca?' },
+];
+
 const RUBRICA = [
   { key: 'content',      nombre: 'Content',
     desc: '¿Has hecho lo que pedía la tarea, todo y solo eso?' },
@@ -35,14 +50,21 @@ async function loadWritingTasks() {
     box.innerHTML = tasks.map(t => `
       <button class="topic-item" style="width:100%;margin-bottom:6px" onclick="openWriting('${t.slug}')">
         <div class="topic-item-info">
-          <div class="topic-item-title">Part ${t.part} · ${t.title}</div>
-          <div class="topic-item-meta">${t.kind} · ${t.word_min}-${t.word_max} palabras${t.attempts ? ` · escrita ${t.attempts}×` : ''}</div>
+          <div class="topic-item-title">${t.lang === 'fr' ? '' : `Part ${t.part} · `}${_esc(t.title)}</div>
+          <div class="topic-item-meta">${wrGenero(t)} · ${t.word_min}-${t.word_max} palabras${t.attempts ? ` · escrita ${t.attempts}×` : ''}</div>
         </div>
+        ${t.lang === 'fr' ? `<span class="badge badge-${(t.nivel || 'c1').toLowerCase()}">${t.nivel === 'C1' ? 'DALF' : t.nivel}</span>` : ''}
         ${t.attempts ? '<div class="topic-check">✓</div>' : ''}
       </button>`).join('');
   } catch (e) {
     box.innerHTML = cajaError(e);
   }
+}
+
+/** El género, dicho como lo diría quien estudia. */
+function wrGenero(t) {
+  const nombres = { email: 'correo', synthese: 'síntesis de documentos', essai: 'ensayo argumentado' };
+  return t.lang === 'fr' ? (nombres[t.kind] || (t.kind === 'letter' ? 'carta' : t.kind)) : t.kind;
 }
 
 // Writing tiene sección propia (ESCRIBIR) desde el 12-ago, así que ya no pinta
@@ -80,19 +102,24 @@ function renderWriting() {
   const guia = Array.isArray(t.guidance) ? t.guidance : [];
   const c = _wrCaja();
   if (!c) return;
+  const frances = t.lang === 'fr';
+  const rubrica = frances ? RUBRICA_FR : RUBRICA;
+  const cabecera = frances
+    ? `${t.nivel === 'C1' ? 'DALF C1' : `FRANCÉS · ${t.nivel}`} · ${wrGenero(t).toUpperCase()}`
+    : `WRITING · PART ${t.part} · ${t.kind.toUpperCase()}`;
 
   c.innerHTML = `
     <button class="btn btn-subtle btn-sm" onclick="cerrarWriting()" style="margin-bottom:12px">← VOLVER</button>
 
     <div class="glass-card-accent anim-slide-up">
-      <div class="card-title">WRITING · PART ${t.part} · ${t.kind.toUpperCase()}</div>
+      <div class="card-title">${cabecera}</div>
       <div style="font-size:0.85rem;font-weight:600;color:var(--text);margin-bottom:8px">${_esc(t.title)}</div>
       <div style="font-size:0.8rem;color:var(--text-2);line-height:1.6">${_esc(t.instructions)}</div>
     </div>
 
     ${t.input_text ? `
       <div class="glass-card">
-        <div class="card-title">TEXTO DE PARTIDA</div>
+        <div class="card-title">${frances ? 'LOS DOCUMENTOS' : 'TEXTO DE PARTIDA'}</div>
         <div class="reading-body" style="font-size:0.8rem">${_esc(t.input_text)}</div>
       </div>` : ''}
 
@@ -103,7 +130,7 @@ function renderWriting() {
       </div>
       <textarea id="wr-body" class="field-input" rows="16"
         style="resize:vertical;line-height:1.6;font-size:0.85rem"
-        placeholder="Escribe aquí tu texto en inglés..."
+        placeholder="Escribe aquí tu texto en ${frances ? 'francés' : 'inglés'}..."
         oninput="countWriting()"></textarea>
       <div id="wr-range" style="font-size:0.68rem;color:var(--text-3);margin-top:6px">
         Objetivo: ${t.word_min}-${t.word_max} palabras. Pasarse o quedarse corto penaliza.
@@ -118,11 +145,13 @@ function renderWriting() {
     </div>
 
     <div class="glass-card">
-      <div class="card-title">AUTOEVALUACIÓN · RÚBRICA DE CAMBRIDGE</div>
+      <div class="card-title">AUTOEVALUACIÓN · ${frances ? 'CRITERIOS DEL DALF' : 'RÚBRICA DE CAMBRIDGE'}</div>
       <p style="font-size:0.7rem;color:var(--text-3);margin-bottom:12px">
         Puntúate de 0 a 5 en cada criterio. Sé honesto: un 5 regalado no te acerca al C1.
+        ${frances ? '<br>El DALF de verdad puntúa sobre 25 con una parrilla más larga: esto es una versión simplificada para autocorregirte.' : ''}
+        ${frances && t.nivel !== 'C1' ? '<br>Esta tarea es de práctica: la nota no cuenta como nivel de examen.' : ''}
       </p>
-      ${RUBRICA.map(r => `
+      ${rubrica.map(r => `
         <div class="wr-criterio">
           <div>
             <div class="wr-criterio-nombre">${r.nombre}</div>
@@ -200,9 +229,10 @@ async function loadSpeakingTasks() {
     box.innerHTML = _spTasks.map(t => `
       <button class="topic-item" style="width:100%;margin-bottom:6px" onclick="openSpeaking('${t.slug}')">
         <div class="topic-item-info">
-          <div class="topic-item-title">${t.title}</div>
+          <div class="topic-item-title">${_esc(t.title)}</div>
           <div class="topic-item-meta">${Math.round(t.seconds / 60 * 10) / 10} min</div>
         </div>
+        ${t.lang === 'fr' ? `<span class="badge badge-${(t.nivel || 'c1').toLowerCase()}">${t.nivel === 'C1' ? 'DALF' : t.nivel}</span>` : ''}
       </button>`).join('');
   } catch (e) {
     box.innerHTML = cajaError(e);
@@ -217,6 +247,7 @@ function openSpeaking(slug) {
   if (!c) return;
   const tips = Array.isArray(t.tips) ? t.tips : [];
   const p = t.prompts;
+  const frances = t.lang === 'fr';
 
   // Part 2 llega como objeto (pregunta + fotos); el resto, como lista de preguntas.
   let cuerpo = '';
@@ -225,6 +256,9 @@ function openSpeaking(slug) {
   } else {
     cuerpo = `
       <div class="sp-question">${_esc(p.question || '')}</div>
+      ${p.documents ? `
+        <div class="card-title" style="margin-top:14px">EL DOSSIER</div>
+        <ul class="sp-prompts">${p.documents.map(d => `<li>${_esc(d)}</li>`).join('')}</ul>` : ''}
       ${p.photos ? `
         <div class="card-title" style="margin-top:14px">LAS TRES ESCENAS · ELIGE DOS</div>
         <ol class="sp-photos">${p.photos.map(f => `<li>${_esc(f)}</li>`).join('')}</ol>` : ''}
@@ -232,14 +266,14 @@ function openSpeaking(slug) {
         <div class="card-title" style="margin-top:14px">OPCIONES</div>
         <ul class="sp-prompts">${p.options.map(o => `<li>${_esc(o)}</li>`).join('')}</ul>` : ''}
       ${p.decision ? `<div class="sp-decision">${_esc(p.decision)}</div>` : ''}
-      ${p.follow_up ? `<div class="sp-followup">Pregunta de seguimiento: ${_esc(p.follow_up)}</div>` : ''}`;
+      ${p.follow_up ? `<div class="sp-followup">${frances ? 'Pregunta del tribunal' : 'Pregunta de seguimiento'}: ${_esc(p.follow_up)}</div>` : ''}`;
   }
 
   c.innerHTML = `
     <button class="btn btn-subtle btn-sm" onclick="initSpeak(true)" style="margin-bottom:12px">← VOLVER</button>
 
     <div class="glass-card-accent anim-slide-up">
-      <div class="card-title">SPEAKING · PARTE ${t.part}</div>
+      <div class="card-title">${frances ? (t.nivel === 'C1' ? 'ORAL · DALF C1' : `ORAL · FRANCÉS ${t.nivel}`) : `SPEAKING · PARTE ${t.part}`}</div>
       <div style="font-size:0.85rem;font-weight:600;color:var(--text);margin-bottom:8px">${_esc(t.title)}</div>
       <div style="font-size:0.78rem;color:var(--text-2);line-height:1.6">${_esc(t.instructions)}</div>
     </div>

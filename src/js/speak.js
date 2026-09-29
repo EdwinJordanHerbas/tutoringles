@@ -17,6 +17,29 @@ const SPEAKING_PHRASES = [
   { phrase: "On reflection, I think the situation is more nuanced than it appears.", level: "C1", topic: "Critical thinking" },
 ];
 
+// Las del francés. No son frases de examen sueltas: son los andamios para
+// hablar sin quedarse en blanco, que es lo que le falta a un A2 que entiende
+// casi todo. Las primeras sirven desde el primer día en Suiza; las últimas son
+// las que puntúan en el oral del DALF C1 (exposé y débat).
+const SPEAKING_PHRASES_FR = [
+  { phrase: "Excusez-moi, je ne suis pas sûr d'avoir bien compris.", level: "A2", topic: "Survie" },
+  { phrase: "Pourriez-vous répéter un peu plus lentement, s'il vous plaît ?", level: "A2", topic: "Survie" },
+  { phrase: "Je ne trouve pas le mot, mais c'est une chose qui sert à ranger les chaussures.", level: "B1", topic: "Reformuler" },
+  { phrase: "Si j'ai bien compris, vous voulez dire que le magasin ouvre à neuf heures.", level: "B1", topic: "Vérifier" },
+  { phrase: "Ce que je veux dire, c'est que j'ai besoin d'un peu plus de temps.", level: "B1", topic: "Reformuler" },
+  { phrase: "Je suis tout à fait d'accord avec toi, mais il faut aussi penser aux clients.", level: "B1", topic: "Réunion" },
+  { phrase: "À mon avis, ce serait plus simple de commencer par le rayon chaussures.", level: "B1", topic: "Réunion" },
+  { phrase: "Je ne pense pas que ce soit une bonne idée, du moins pas tout de suite.", level: "B2", topic: "Nuancer" },
+  { phrase: "Il me semble que le problème vient surtout du manque de personnel.", level: "B2", topic: "Opinion" },
+  { phrase: "Certes, cette solution coûte cher ; néanmoins, elle nous ferait gagner du temps.", level: "C1", topic: "Argumenter" },
+  { phrase: "Force est de constater que les habitudes de consommation ont profondément changé.", level: "C1", topic: "Exposé" },
+  { phrase: "Pour conclure, je dirais que les avantages l'emportent largement sur les inconvénients.", level: "C1", topic: "Exposé" },
+];
+
+/** El banco de frases del idioma que se está estudiando. */
+const frasesDelIdioma = () =>
+  (typeof _idioma !== 'undefined' && _idioma === 'fr') ? SPEAKING_PHRASES_FR : SPEAKING_PHRASES;
+
 // ── STATE ───────────────────────────────────────────────
 let _currentPhrase = null;
 let _isRecording   = false;
@@ -40,7 +63,9 @@ function initSpeak(forzar = false) {
 
 function renderSpeakSection() {
   const container = document.getElementById('speak-content');
-  _currentPhrase  = SPEAKING_PHRASES[Math.floor(Math.random() * SPEAKING_PHRASES.length)];
+  const banco     = frasesDelIdioma();
+  const frances   = banco === SPEAKING_PHRASES_FR;
+  _currentPhrase  = banco[Math.floor(Math.random() * banco.length)];
 
   container.innerHTML = `
     <div class="glass-card-accent anim-slide-up">
@@ -71,19 +96,25 @@ function renderSpeakSection() {
       </div>
     </div>
 
+    ${frances ? speakTarjetasFrances() : ''}
+
     <!-- Las 5 tareas del oral del C1 vivían dentro de EXAMEN, y EXAMEN salió de
          la barra el 2-ago. Como sólo las cargaba exam.js, se quedaron
          inalcanzables sin que nadie lo notara: speaking_practice llevaba cero
-         filas desde julio. Su sitio es éste, que es la pestaña de hablar. -->
+         filas desde julio. Su sitio es éste, que es la pestaña de hablar.
+         El servidor da las del idioma activo: en francés, las de hablar de
+         ti (B1) y el exposé y el debate del DALF. -->
     <div class="glass-card-accent" style="margin-top:8px">
-      <div class="card-title">LAS 4 PARTES DEL ORAL · C1</div>
+      <div class="card-title">${frances ? 'EL ORAL EN FRANCÉS' : 'LAS 4 PARTES DEL ORAL · C1'}</div>
       <p style="font-size:0.72rem;color:var(--text-3);margin-bottom:10px">
-        Con cronómetro para el minuto seguido. El examen es el 1 de diciembre.
+        ${frances
+          ? 'Con cronómetro y en alto. Primero, hablar de ti y contar lo que te pasa; al final, el exposé y el debate del DALF.'
+          : 'Con cronómetro para el minuto seguido.'}
       </p>
       <div id="speaking-tasks"><div class="empty-state" style="padding:8px 0"><div class="spinner"></div></div></div>
     </div>
 
-    <div class="glass-card" style="margin-top:8px">
+    <div class="glass-card" style="margin-top:8px;${frances ? 'display:none' : ''}">
       <div class="card-title">TIPS CAMBRIDGE CAE</div>
       <div style="font-size:0.78rem;color:var(--text-2);line-height:1.7">
         • Usa <strong>discourse markers</strong>: "Nevertheless", "On the other hand", "In spite of"<br>
@@ -100,9 +131,38 @@ function renderSpeakSection() {
   `;
 
   loadSpeakHistory();
-  cargarPronFrase();
   // Vive en writing.js (comparte pantalla con las tareas escritas del C1).
   if (typeof loadSpeakingTasks === 'function') loadSpeakingTasks();
+  // La figurada es del inglés.
+  if (!frances) cargarPronFrase();
+}
+
+/**
+ * Lo que va en HABLAR con el francés: el formato del oral del DALF C1, para
+ * saber hacia dónde se va, y los trucos para no quedarse en blanco, que es lo
+ * que hace falta hoy.
+ */
+function speakTarjetasFrances() {
+  return `
+    <div class="glass-card" style="margin-top:8px">
+      <div class="card-title">PARA NO QUEDARTE EN BLANCO</div>
+      <div style="font-size:0.78rem;color:var(--text-2);line-height:1.7">
+        • Si no sale la palabra, <strong>descríbela</strong>: "c'est un truc qui sert à…", "c'est comme… mais…"<br>
+        • Gana tiempo sin callarte: <strong>"alors…", "voyons…", "comment dire…"</strong><br>
+        • Comprueba en vez de asentir: <strong>"si j'ai bien compris…"</strong><br>
+        • Con compañeros, casi siempre <strong>tu</strong>; con clientes y en la comuna, <strong>vous</strong>
+      </div>
+    </div>
+    <div class="glass-card" style="margin-top:8px">
+      <div class="card-title">EL ORAL DEL DALF C1</div>
+      <div style="font-size:0.78rem;color:var(--text-2);line-height:1.7">
+        Una hora de preparación con un dossier de documentos, y después unos
+        30 minutos ante el tribunal: un <strong>exposé</strong> en el que presentas el
+        tema y defiendes una postura, y un <strong>débat</strong> en el que te llevan la
+        contraria. Lo que puntúa: estructurar, argumentar y matizar. Tienes los
+        dos más abajo, con cronómetro.
+      </div>
+    </div>`;
 }
 
 // Pide al servidor cómo se lee la frase del día. El banco de frases de esta
@@ -128,7 +188,11 @@ function speakPhrase() {
 
 // Compara lo dicho con la frase objetivo → % de palabras acertadas.
 function scoreSpeech(target, said) {
-  const clean = (s) => s.toLowerCase().replace(/[^a-z0-9\s']/g, '').split(/\s+/).filter(Boolean);
+  // Sin tildes antes de filtrar: con el francés, "été" o "à" perdían letras y
+  // las palabras acentuadas no llegaban a compararse enteras.
+  const clean = (s) => s.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s']/g, ' ').split(/\s+/).filter(Boolean);
   const t = clean(target), s = new Set(clean(said));
   if (!t.length) return 0;
   const hit = t.filter((w) => s.has(w)).length;
@@ -155,7 +219,7 @@ function toggleRecording() {
   if (_isRecording) { _recognition?.stop(); return; }
 
   _recognition = new SpeechRec();
-  _recognition.lang = 'en-GB';
+  _recognition.lang = typeof idiomaVoz === 'function' ? idiomaVoz() : 'en-GB';
   _recognition.interimResults = false;
   _recognition.maxAlternatives = 1;
 

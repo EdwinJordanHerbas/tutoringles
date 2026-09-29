@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="description" content="TutorIngles — PWA personal para aprender inglés A2→C1 Cambridge CAE con SRS, gramática y simulacros.">
+<meta name="description" content="TutorIngles — PWA personal para aprender inglés y francés hasta el C1 (Cambridge y DALF), con SRS, situaciones reales y modo Tetris.">
 <meta name="theme-color" content="#d4e8f5">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="light-content">
 <meta name="apple-mobile-web-app-title" content="TutorIngles">
 <link rel="manifest" href="manifest.json">
-<title>TutorIngles — A2→C1 Cambridge CAE</title>
+<title>TutorIngles — inglés y francés hasta el C1</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
@@ -19,6 +19,7 @@
 <link rel="stylesheet" href="src/css/sections.css">
 <link rel="stylesheet" href="src/css/pron.css">
 <link rel="stylesheet" href="src/css/sesion.css">
+<link rel="stylesheet" href="src/css/tetris.css">
 <link rel="stylesheet" href="src/css/animations.css">
 </head>
 <body>
@@ -28,7 +29,7 @@
   <div class="splash-inner">
     <img class="splash-logo" src="src/img/logo.png" alt="TutorInglés" width="256" height="256">
     <h1 class="splash-title">TUTOR<span>INGLÉS</span></h1>
-    <p class="splash-sub">A2 → C1 · Cambridge CAE</p>
+    <p class="splash-sub">Inglés y francés · hacia el C1</p>
     <div class="splash-bar"><div class="splash-fill"></div></div>
   </div>
 </div>
@@ -61,7 +62,7 @@
         <img id="hdr-logo" src="src/img/logo.png" alt="" width="256" height="256">
         <div>
           <p id="hdr-date">HOY</p>
-          <h1>TUTOR<span>INGLÉS</span></h1>
+          <h1 id="hdr-titulo">TUTOR<span>INGLÉS</span></h1>
         </div>
       </div>
       <div id="hdr-right">
@@ -74,6 +75,10 @@
       </div>
     </div>
     <div id="xp-row">
+      <!-- Qué idioma se está estudiando, y un toque para cambiarlo. Va en esta
+           fila y no arriba a la derecha: allí empujaba fuera de la pantalla los
+           botones de Progreso y Ajustes en un móvil de 390 px. -->
+      <button id="idioma-btn" class="idioma-chip" onclick="cambiarIdioma()" aria-label="Cambiar de idioma">EN</button>
       <span id="rank-chip" class="rank-badge">D</span>
       <div id="xp-bar"><div id="xp-fill"></div></div>
       <span id="xp-text">0 XP</span>
@@ -105,10 +110,17 @@
       <!-- Un solo botón: sin decidir nada, con final. Lo primero de la pantalla
            porque es lo único que hay que hacer para no romper la racha.
            NO puede haber otro botón primario en HOY compitiendo con este. -->
-      <button class="btn btn-primary btn-sesion" onclick="empezarSesion()">
-        <span class="btn-sesion-tit">EMPEZAR</span>
+      <!-- Con el modo Tetris activo, este mismo botón hace lo que toque AHORA
+           (test del despertar, ronda, repaso de almohada o modo noche) y el
+           subtítulo lo dice. Sigue siendo el único primario. -->
+      <button class="btn btn-primary btn-sesion" onclick="empezarHoy()">
+        <span class="btn-sesion-tit" id="btn-sesion-tit">EMPEZAR</span>
         <span class="btn-sesion-sub" id="btn-sesion-sub">cinco minutos</span>
       </button>
+
+      <!-- El día Tetris: despertar, rondas, almohada y noche, y si la noche
+           le está funcionando o no. -->
+      <div id="tetris-hoy"></div>
 
       <!-- Plan de 30 días -->
       <div class="glass-card-accent" id="plan-card">
@@ -254,9 +266,10 @@
          desde julio sin que nada lo delatara. -->
     <div class="sec" id="sec-escribir">
       <div class="sec-title">ESCRIBIR</div>
+      <div id="escribir-aviso"></div>
       <div class="glass-card-accent anim-fade-in" style="margin-bottom:14px">
-        <div class="card-title">LAS TAREAS DEL C1</div>
-        <p style="font-size:0.72rem;color:var(--text-3);margin-bottom:10px">
+        <div class="card-title" id="escribir-tit">LAS TAREAS DEL C1</div>
+        <p style="font-size:0.72rem;color:var(--text-3);margin-bottom:10px" id="escribir-sub">
           Escribes tú y te puntúas con la rúbrica oficial de Cambridge.
         </p>
         <div id="writing-tasks"><div class="empty-state" style="padding:8px 0"><div class="spinner"></div></div></div>
@@ -325,5 +338,7 @@
 <script src="src/js/diagnostico.js"></script>
 <script src="src/js/progress.js"></script>
 <script src="src/js/settings.js"></script>
+<script src="src/js/sons.js"></script>
+<script src="src/js/tetris.js"></script>
 </body>
 </html>
