@@ -555,7 +555,10 @@ por tandas de 5.000). En local, igual: `npm run lexico && npm run migrate`.
 ## Despliegue
 
 **Render (web, gratis) + Neon (Postgres, gratis)** desde el 29-sep-2026, en
-**https://tutoringles.onrender.com**. **Cada push a `main` despliega solo** (`autoDeploy`).
+**https://tutoringles.onrender.com**. **El push NO despliega solo**: el servicio se creó con la URL
+pública del repo y Render no recibe los push de GitHub (comprobado: el merge del 29-sep no lanzó
+nada). Para desplegar, `trigger_deploy` del conector de Render o "Manual Deploy" en el panel. Para
+que sea automático, dar acceso a Render al repo (su app de GitHub) desde el panel del servicio.
 
 - Render: servicio `tutoringles` (`srv-datv1ljbc2fs73doiu0g`, Frankfurt). Se creó con el
   conector de Render, no con el Blueprint: `render.yaml` describe la misma configuración y sirve
