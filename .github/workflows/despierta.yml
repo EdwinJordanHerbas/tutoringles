@@ -6,31 +6,37 @@
 # Llama a /ping, que no toca la base: así Neon sí puede dormirse y no se gastan
 # sus horas de cómputo gratuitas.
 #
-# Se activa creando la variable del repo TUTOR_URL (Settings → Secrets and
-# variables → Actions → Variables) con la URL de Render, sin barra final.
-# Sin ella, el job no hace nada.
+# SÓLO DE DÍA, y no es un descuido: las 750 horas gratis de Render son por
+# cuenta, no por servicio, y en la misma cuenta vive otro servicio gratis
+# (n8n). Despierta las 24 h, esta app se comería 744 ella sola y a final de mes
+# Render suspendería las dos. De 05:00 a 22:59 UTC son 07:00-01:00 en verano y
+# 06:00-00:00 en invierno en Madrid/Suiza: cubre los tres avisos (08:00, 20:30
+# y 22:30) con ~560 h al mes. De noche no hace falta: el modo noche cuenta las
+# pistas en el móvil y las manda cuando puede (reintenta si Render dormía).
+# Un aviso puesto fuera de esa franja no sale.
 #
 # El cron de GitHub no es puntual (puede retrasarse bastante en horas de
-# carga); por eso va cada 10 minutos y no cada 14.
+# carga); por eso va cada 10 minutos y no cada 14. GitHub apaga los cron de un
+# repo sin commits en 60 días.
 
 name: despierta
 
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '*/10 5-22 * * *'
   workflow_dispatch:
 
 permissions: {}
 
 jobs:
   ping:
-    if: ${{ vars.TUTOR_URL != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
       - name: ping
         env:
-          URL: ${{ vars.TUTOR_URL }}
+          # La variable del repo TUTOR_URL manda si existe.
+          URL: ${{ vars.TUTOR_URL || 'https://tutoringles.onrender.com' }}
         # Un arranque en frío de Render tarda hasta un minuto: de ahí el
         # --max-time largo y los reintentos.
         run: curl -fsS --max-time 90 --retry 3 --retry-delay 10 "$URL/ping"
