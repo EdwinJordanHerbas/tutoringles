@@ -474,7 +474,9 @@ app.get('/user-words', async (req, res) => {
     const params = [PROFILE_ID, lang];
     if (status) { params.push(status); q += ` AND uw.status=$${params.length}`; }
     if (due === '1') { params.push(todayStr()); q += ` AND uw.next_review_date<=$${params.length}`; }
-    q += ' ORDER BY uw.next_review_date, uw.id';
+    // Repasos vencidos antes que nuevas: las nuevas guardan como fecha la de su
+    // alta, siempre anterior a la de cualquier repaso, y los tapaban (13-oct-2026).
+    q += " ORDER BY (uw.status = 'new'), uw.next_review_date, uw.id";
     const { rows } = await db(q, params);
     res.json(await figurarSi(lang, rows, 'word'));
   } catch (e) { fallo(res, e); }
@@ -1709,7 +1711,7 @@ app.get('/sesion-diaria', async (req, res) => {
          FROM user_words uw JOIN words w ON w.id = uw.word_id
         WHERE uw.profile_id = $1 AND uw.next_review_date <= $2 AND w.lang = $3
           AND NOT (uw.id = ANY($4::int[]))
-        ORDER BY uw.next_review_date, uw.id
+        ORDER BY (uw.status = 'new'), uw.next_review_date, uw.id
         LIMIT $5`, [PROFILE_ID, hoy, lang, falladas.map((f) => f.id), meta - falladas.length]
     );
     const palabras = [...falladas, ...nuevas];
