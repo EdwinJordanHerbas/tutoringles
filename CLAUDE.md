@@ -140,6 +140,57 @@ Cuatro detalles que costaría redescubrir:
 Avisos nuevos: `despertar` (08:00) y `almohada` (22:30), cada uno con su candado en `push_log`
 (tipo distinto) y su `tag`, para que no se tapen entre ellos ni con el diario.
 
+## IA con la API de Claude (23-oct-2026)
+
+Con un crédito de 100 $ en la API de Claude. **Estado: backend hecho y probado (rama
+`claude/eloquent-brahmagupta-5sgj5i`, commit 0433a6c); las pantallas están por hacer.**
+
+- **Motor único: `lib/ia.js` → `llamarClaude()`.** `client.beta.messages.parse` con salida JSON
+  validada por un esquema de Zod (`betaZodOutputFormat`), el prompt de sistema con
+  `cache_control`, `output_config.effort` y, en Opus/Sonnet 5.5, reenvío del lado del servidor
+  en rechazos (`fallbacks: 'default'`, beta `server-side-fallback-2026-07-01`). Opus 5.5 por
+  defecto (`config.ia_modelo`; en Ajustes se puede bajar a Sonnet 5.5 o Haiku 5.5).
+  **El razonamiento en Opus 5.5 no se puede apagar**: el control es `effort` (pronunciación y
+  conversación `low`, escritura/oral/consejo `medium`).
+- **Claude no oye.** Recibe lo que ENTENDIÓ el reconocedor del móvil (alternativas y confianza)
+  o el dictado del teclado, y diagnostica por las diferencias ("sheep" por "ship" = /ɪ/).
+  **En el iPhone con la app instalada no hay `SpeechRecognition`**: toda entrada de voz de la IA
+  tiene que aceptar también texto, que con el micro del teclado (dictado) es voz igualmente.
+- **Cada petición es de un solo turno**, también la conversación (el diálogo va escrito dentro
+  del mensaje). En Opus 5.5 los bloques de razonamiento quedan atados a la conversación exacta;
+  un historial que se recorta da 400. Con un turno no hay historial que romper.
+- **El prompt de sistema no cambia ni un byte** (test): idioma, fecha y perfil van en el mensaje
+  del usuario. Los cinco pasan de 512 tokens, el mínimo que se cachea.
+- **Tres guardas antes de gastar** (`pedirIA` en server.js): hay clave, hay `APP_TOKEN` (sin él
+  cualquiera gastaría el crédito) y no se ha pasado el tope del mes (`config.ia_tope_mes`, 15 $;
+  más un freno en memoria de 40 llamadas/10 min). Cada llamada deja fila en `ia_uso` con su coste.
+- **La clave**: `ANTHROPIC_API_KEY` en el entorno manda; si no, la de Ajustes en
+  `config.ia_clave`, que **está vetada en `/config/:key`** (`CONFIG_RESERVADA`) y sólo se escribe
+  por `PUT /ia/clave`, que la comprueba con `models.retrieve` (no gasta). El SDK 1.x la manda
+  como `Authorization: Bearer`, no como `x-api-key`.
+- **Perfil adaptativo** (`lib/ia-perfil.js`, tabla `ia_errores`): cada respuesta trae `errores`
+  con una `clave` corta; se cuentan por (lang, tipo, clave) y los más repetidos vuelven en el
+  siguiente prompt para que Claude reutilice la clave. **A la segunda vez, el error se convierte
+  en tarjeta del SRS** (categoría `errores`, que `lib/fases.js` no cuenta), como mucho 10 al día;
+  los de pronunciación no (se practican en SONIDOS).
+- **HABLAR sólo se marca con micrófono** (`via: 'voz'`): el dictado no se distingue de teclear.
+- Rutas: `/ia/estado`, `/ia/clave` (PUT/DELETE), `/ia/ajustes`, `/ia/pronunciacion`,
+  `/ia/conversacion`, `/ia/escritura` (corrige, no guarda: el cliente rellena la rúbrica y
+  `POST /writing/submissions` acepta `ia_feedback`), `/ia/oral` (guarda en
+  `speaking_submissions`; sólo C1 crea `exam_attempts`), `/ia/perfil`, `/ia/consejo`,
+  `/ia/prueba` (una llamada real de céntimos; sale en los registros de Render).
+- **Sin gastar**: `?mock=1` devuelve respuestas con la forma real (`lib/ia-mock.js`), y
+  `tools/claude-falso.js` imita la API para probar el servidor entero
+  (`ANTHROPIC_BASE_URL=http://127.0.0.1:4999`).
+
+**Pendiente (frontend):** `src/js/ia.js` nuevo (estado, `iaPost` con timeout, Ajustes › IA con la
+clave en un campo de sólo escritura, gasto del mes y botón PROBAR), `src/js/charla.js` nuevo
+(conversación por situación, voz con `vozDecir` + micro o dictado, corrección bajo cada frase,
+sugerencias), botones de IA en work.js / speak.js / pron.js (pedir `maxAlternatives` 5),
+ESCRIBIR (corregir con IA y rellenar la rúbrica) y el oral (grabar o dictar y corregir), "Lo que
+más fallas" en PROGRESO, `/ia` en `API_PREFIXES` y los JS nuevos en `PRECACHE` de sw.js (y subir
+`VERSION`), y prefijo `ia`/`charla` en todo nombre global nuevo.
+
 ## Que la app se abra
 
 **Medición a los 11 días del plan (2-ago-2026), que es la que manda sobre cualquier intuición:**
