@@ -15,7 +15,7 @@ let _pronRonda      = [];     // preguntas de la ronda en curso
 let _pronIdx        = 0;
 let _pronAciertos   = 0;
 let _pronFallos     = 0;
-let _pronModo       = 'oido'; // 'oido' | 'lectura'
+let _pronModo       = 'oido'; // 'oido' | 'lectura' | 'decir'
 let _pronGuia       = null;   // guía de cómo se lee cada letra
 let _pronInited     = false;
 
@@ -580,23 +580,31 @@ const PronRec = window.SpeechRecognition || window.webkitSpeechRecognition;
 let _decirEscuchando = false;
 let _decirRec = null;
 
+// Lo que entendió el reconocedor (o el dictado) en el último intento, SIN
+// normalizar: es lo que se manda a la IA si se pulsa «¿POR QUÉ?». El juicio
+// local trabaja con la versión limpia, pero a Claude le sirve ver «Sheep.» o
+// «she» tal cual salieron, con su confianza.
+let iaPronIntento = null;   // { objetivo, alternativas: [{transcript, confidence}] }
+
+// La misma limpieza para el micro y para el dictado: si cada camino limpiara a
+// su manera, una misma palabra podría salir "bien" por uno y "no te ha pillado"
+// por el otro. El apóstrofo tipográfico del teclado del iPhone (’) se iguala al
+// recto antes de quitar lo que no es letra.
+const iaPronNorm = (s) => String(s || '').toLowerCase()
+  .replace(/[’‘ʼ]/g, "'").replace(/[^a-z' ]/g, '').replace(/\s+/g, ' ').trim();
+
 function renderPreguntaDecir(q, p, pct) {
   const caja = document.getElementById('pron-quiz');
   const objetivo = q.correcta === 'a' ? p.word_a : p.word_b;
   const otra     = q.correcta === 'a' ? p.word_b : p.word_a;
   const figura   = q.correcta === 'a' ? p.fig_a  : p.fig_b;
+  iaPronIntento = null;
 
-  if (!PronRec) {
-    caja.innerHTML = `
-      <div class="glass-card">
-        <div class="pron-honestidad">
-          Este navegador no transcribe voz, así que aquí no se puede comprobar
-          nada. En iPhone, Safari lo bloquea con la app instalada en la pantalla
-          de inicio. Usa los modos de oído y lectura.
-        </div>
-      </div>`;
-    return;
-  }
+  // Sin reconocedor (el iPhone con la app instalada) esto era un aviso sin
+  // salida, y el iPhone es justo donde se usa la app. El dictado del teclado
+  // también es voz: escribe lo que entiende, igual que el reconocedor, sólo que
+  // da una hipótesis en vez de seis. El juicio es el mismo.
+  const hayMicro = !!PronRec;
 
   caja.innerHTML = `
     <div class="glass-card anim-slide-up">
@@ -611,13 +619,70 @@ function renderPreguntaDecir(q, p, pct) {
         <button class="btn btn-subtle" onclick="pronDecirSinGrabar(${JSON.stringify(objetivo).replace(/"/g, '&quot;')}, 1, this)">
           <img src="src/img/icons/listen.png" alt="" class="ico"> OÍRLA
         </button>
-        <button class="speak-record-btn decir-mic" id="decir-mic" onclick="grabarParaComprobar(${JSON.stringify(objetivo).replace(/"/g, '&quot;')}, ${JSON.stringify(otra).replace(/"/g, '&quot;')})">
+        ${hayMicro ? `
+        <button class="speak-record-btn decir-mic" id="decir-mic" aria-label="Decirla al micro" onclick="grabarParaComprobar(${JSON.stringify(objetivo).replace(/"/g, '&quot;')}, ${JSON.stringify(otra).replace(/"/g, '&quot;')})">
           <img src="src/img/icons/mic.png" alt="" class="ico">
-        </button>
+        </button>` : ''}
       </div>
-      <div class="decir-estado" id="decir-estado">Toca el micro y dila</div>
+      <div class="decir-estado" id="decir-estado">${hayMicro ? 'Toca el micro y dila' : 'Díctala con el micro del teclado'}</div>
+      ${iaPronHtmlDictado(hayMicro)}
       <div id="pron-feedback"></div>
     </div>`;
+}
+
+/**
+ * El campo de dictado del modo DECIRLO. Con micro también está (regla de la
+ * app: toda entrada de voz acepta texto), pero en segundo plano.
+ */
+function iaPronHtmlDictado(hayMicro) {
+  return `
+    <div class="ia-dictado">
+      <div class="ia-dictado-fila">
+        <input class="field-input" id="ia-pron-txt" type="text" lang="en" autocomplete="off"
+          autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done"
+          aria-label="La palabra, dictada"
+          placeholder="${hayMicro ? 'O díctala con el teclado' : 'Díctala con el micro del teclado'}"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();iaPronComprobarDictado(document.getElementById('ia-pron-ok'))}">
+        <button class="btn btn-subtle btn-sm" id="ia-pron-ok" onclick="iaPronComprobarDictado(this)">COMPROBAR</button>
+      </div>
+      ${typeof iaHtmlPistaDictado === 'function' ? iaHtmlPistaDictado('en') : ''}
+    </div>`;
+}
+
+/** Lo dictado pasa por el MISMO juicio que el micro, con una sola alternativa. */
+function iaPronComprobarDictado() {
+  const q = _pronRonda[_pronIdx];
+  const campo = document.getElementById('ia-pron-txt');
+  if (!q || !campo) return;
+  const txt = String(campo.value || '').trim();
+  if (!txt) {
+    toast('Dicta la palabra primero', 'error');
+    campo.focus();
+    return;
+  }
+  const objetivo = q.correcta === 'a' ? q.par.word_a : q.par.word_b;
+  const otra     = q.correcta === 'a' ? q.par.word_b : q.par.word_a;
+  iaPronIntento = { objetivo, alternativas: [{ transcript: txt, confidence: 0 }] };
+  // Se vacía: el dictado del iPhone AÑADE a lo que ya hay, y el segundo
+  // intento saldría «Sheep. Ship.» y no se sabría cuál juzgar. Lo que entendió
+  // se sigue viendo en el veredicto. Y se suelta el foco para que se cierre el
+  // teclado, que si no tapa el veredicto.
+  campo.value = '';
+  campo.blur();
+  juzgarPronunciacion([{ texto: iaPronNorm(txt), conf: 0 }], objetivo, otra);
+}
+
+/**
+ * «¿POR QUÉ?»: la IA lee lo que entendió el reconocedor y explica qué sonido
+ * falló. Sólo detrás del botón (cuesta dinero), y si sale bien el botón se
+ * quita: pulsarlo otra vez pagaría la misma respuesta dos veces.
+ */
+async function iaPronPorQue(btn) {
+  const it = iaPronIntento;
+  const caja = document.getElementById('ia-pron-diag');
+  if (!it || !caja || typeof iaDiagnosticarPron !== 'function') return;
+  await iaDiagnosticarPron({ objetivo: it.objetivo, alternativas: it.alternativas, lang: 'en', caja, btn });
+  if (caja.querySelector('.ia-caja') && btn?.isConnected) btn.remove();
 }
 
 function grabarParaComprobar(objetivo, otra) {
@@ -651,8 +716,13 @@ function grabarParaComprobar(objetivo, otra) {
   };
 
   _decirRec.onresult = (ev) => {
+    // Las crudas, antes de limpiarlas: son las que lee la IA.
+    iaPronIntento = {
+      objetivo,
+      alternativas: typeof iaAlternativasDe === 'function' ? iaAlternativasDe(ev.results[0]) : [],
+    };
     const alts = [...ev.results[0]].map((a) => ({
-      texto: (a.transcript || '').toLowerCase().replace(/[^a-z' ]/g, '').trim(),
+      texto: iaPronNorm(a.transcript),
       conf: a.confidence,
     }));
     juzgarPronunciacion(alts, objetivo, otra);
@@ -674,33 +744,51 @@ function juzgarPronunciacion(alts, objetivo, otra) {
 
   const pObj = puesto(obj);
   const pAlt = puesto(alt);
+  const q = _pronRonda[_pronIdx];
 
-  let veredicto, clase, explica;
+  // `cuenta`: el intento se puede juzgar (salió una de las dos palabras).
+  let veredicto, clase, explica, cuenta = true, acierto = false;
   if (pObj === 0) {
     veredicto = 'Bien dicho';
     clase = 'bien';
     explica = `Te ha entendido «${objetivo}» a la primera. Ese sonido te sale.`;
-    _pronAciertos++;
+    acierto = true;
   } else if (pAlt === 0) {
     veredicto = `Te ha entendido «${otra}»`;
     clase = 'mal';
     explica = `Querías decir «${objetivo}». Se te ha ido al otro sonido del par: es justo lo que hay que separar.`;
-    _pronFallos++;
   } else if (pObj > 0) {
     veredicto = 'Casi';
     clase = 'medio';
     explica = `«${objetivo}» aparece, pero no como primera opción. Ha entendido «${alts[0].texto}». Marca más el sonido.`;
-    _pronFallos++;
   } else {
     veredicto = 'No te ha pillado';
     clase = 'medio';
+    cuenta = false;
     explica = alts[0]?.texto
       ? `Ha entendido «${alts[0].texto}», que no es ninguna de las dos. Puede ser el micro o el ruido: prueba otra vez.`
       : 'No ha entendido nada. Acércate al micro y repite.';
   }
 
-  const q = _pronRonda[_pronIdx];
+  // Cuenta el PRIMER intento que se pueda juzgar, como en sons.js. Con el
+  // dictado, que vacía el campo justo para repetir, cada COMPROBAR sumaba: cinco
+  // «sheep» eran cinco aciertos de una sola pregunta, y renderResultado los
+  // manda al servidor (pron_progress y XP). Repetir sigue sirviendo para
+  // practicar; sólo deja de puntuar. La marca va aparte de `respondida`, que
+  // también se pone con «No te ha pillado»: si fuera ésa, un primer intento sin
+  // juicio cerraría la pregunta sin acierto ni fallo.
+  let yaContaba = false;
+  if (cuenta && q) {
+    if (q.contada) yaContaba = true;
+    else {
+      q.contada = true;
+      if (acierto) _pronAciertos++; else _pronFallos++;
+    }
+  }
   if (q) q.respondida = true;
+
+  // El botón de la IA sólo si hay algo que mandarle de ESTE intento.
+  const conIa = !!(iaPronIntento && iaPronIntento.objetivo === objetivo && iaPronIntento.alternativas?.length);
 
   const fb = document.getElementById('pron-feedback');
   if (fb) {
@@ -708,15 +796,20 @@ function juzgarPronunciacion(alts, objetivo, otra) {
       <div class="pron-fb ${clase}">
         <div class="pron-fb-tit">${escaparHtml(veredicto)}</div>
         <div class="decir-explica">${escaparHtml(explica)}</div>
+        ${yaContaba ? '<div class="decir-explica" style="color:var(--text-3)">Este intento ya no cambia la ronda: cuenta el primero. Repetir sí sirve.</div>' : ''}
         <div class="decir-oidas">
           <span class="decir-oidas-et">lo que ha entendido</span>
           ${alts.slice(0, 3).map((a, i) =>
             `<span class="decir-alt${i === 0 ? ' primera' : ''}">${escaparHtml(a.texto || '—')}</span>`).join('')}
         </div>
-        <button class="btn btn-subtle btn-sm" onclick="pronOirLasDos(${JSON.stringify(objetivo).replace(/"/g, '&quot;')}, ${JSON.stringify(otra).replace(/"/g, '&quot;')}, this, pronPar(${q.par.id}))">
-          <img src="src/img/icons/listen.png" alt="" class="ico"> OÍR LAS DOS
-        </button>
+        <div class="ia-acciones">
+          <button class="btn btn-subtle btn-sm" onclick="pronOirLasDos(${JSON.stringify(objetivo).replace(/"/g, '&quot;')}, ${JSON.stringify(otra).replace(/"/g, '&quot;')}, this, pronPar(${q.par.id}))">
+            <img src="src/img/icons/listen.png" alt="" class="ico"> OÍR LAS DOS
+          </button>
+          ${conIa ? '<button class="btn btn-subtle btn-sm" onclick="iaPronPorQue(this)">¿POR QUÉ? · IA</button>' : ''}
+        </div>
       </div>
+      <div id="ia-pron-diag"></div>
       <div class="decir-limite">
         Esto comprueba <b>un sonido</b>, el que separa estas dos palabras. No es
         una nota de tu pronunciación entera.

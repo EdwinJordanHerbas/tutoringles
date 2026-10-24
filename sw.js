@@ -3,7 +3,7 @@
 //  · Estáticos (css/js/fuentes):     cache-first con actualización en segundo plano
 //  · Navegación (index.html):        network-first con fallback a caché (offline)
 //  · API (/words, /stats, etc.):     siempre red — nunca cachear datos dinámicos
-const VERSION     = 'tutoringles-v34';
+const VERSION     = 'tutoringles-v35';
 const STATIC_CACHE = `${VERSION}-static`;
 
 const PRECACHE = [
@@ -16,6 +16,8 @@ const PRECACHE = [
   '/src/css/pron.css',
   '/src/css/sesion.css',
   '/src/css/tetris.css',
+  '/src/css/ia.css',
+  '/src/css/charla.css',
   '/src/css/animations.css',
   '/src/js/app.js',
   '/src/js/voz.js',
@@ -35,7 +37,9 @@ const PRECACHE = [
   '/src/js/progress.js',
   '/src/js/settings.js',
   '/src/js/sons.js',
-  '/src/js/tetris.js'
+  '/src/js/tetris.js',
+  '/src/js/ia.js',
+  '/src/js/charla.js'
 ];
 
 // Rutas de API — nunca pasan por caché
@@ -45,7 +49,7 @@ const API_PREFIXES = [
   '/exam-attempts', '/exam-questions', '/exam-quiz', '/curriculum', '/diagnostico',
   '/plan', '/stats', '/config', '/auth', '/health', '/pronunciation',
   '/sesion-diaria', '/push', '/situations', '/tracks', '/profile', '/reading', '/listening', '/writing', '/speaking',
-  '/idioma', '/tetris'
+  '/idioma', '/tetris', '/ia'
 ];
 
 self.addEventListener('install', (event) => {

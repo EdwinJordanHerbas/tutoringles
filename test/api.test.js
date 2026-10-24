@@ -146,3 +146,37 @@ test('el test de nivel del francés nunca envía la respuesta correcta', conAuth
   const texto = await (await get('/diagnostico/fr')).text();
   assert.ok(!texto.includes('"correcta"'), 'la respuesta del test de francés no puede salir del servidor');
 });
+
+// ── IA (23-oct-2026) ─────────────────────────────────────
+// Sólo GET: esta suite corre contra producción y no puede gastar crédito.
+
+test('la clave de la API de Claude no se puede leer por /config', conAuth, async (t) => {
+  if (!(await servidorVivo())) return t.skip(`sin servidor en ${URL}`);
+  const r = await get('/config/ia_clave');
+  assert.strictEqual(r.status, 403);
+});
+
+test('/ia/estado dice si hay IA sin enseñar la clave', conAuth, async (t) => {
+  if (!(await servidorVivo())) return t.skip(`sin servidor en ${URL}`);
+  const r = await get('/ia/estado');
+  assert.strictEqual(r.status, 200);
+  const j = await r.json();
+  assert.strictEqual(typeof j.disponible, 'boolean');
+  assert.ok(Array.isArray(j.modelos) && j.modelos.length >= 1);
+  assert.ok(typeof j.gasto_mes === 'number' && typeof j.tope_mes === 'number');
+  // Como mucho los cuatro últimos caracteres, nunca la clave.
+  const texto = JSON.stringify(j);
+  assert.ok(!/sk-ant-/.test(texto), 'la clave no puede salir en /ia/estado');
+  if (j.clave_final !== null) assert.ok(j.clave_final.length <= 4);
+});
+
+test('/ia/perfil va por idioma', conAuth, async (t) => {
+  if (!(await servidorVivo())) return t.skip(`sin servidor en ${URL}`);
+  for (const lang of ['en', 'fr']) {
+    const r = await get(`/ia/perfil?lang=${lang}`);
+    assert.strictEqual(r.status, 200);
+    const j = await r.json();
+    assert.strictEqual(j.lang, lang);
+    assert.ok(Array.isArray(j.errores));
+  }
+});

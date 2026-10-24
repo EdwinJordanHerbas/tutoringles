@@ -45,6 +45,8 @@ function renderSettings2(s) {
       <button class="btn btn-subtle" onclick="cambiarIdioma()">PASAR A ${frances ? 'INGLÉS' : 'FRANCÉS'}</button>
     </div>
 
+    ${typeof iaHtmlAjustesHueco === 'function' ? iaHtmlAjustesHueco() : ''}
+
     ${typeof renderTetrisAjustes === 'function' ? renderTetrisAjustes(s.tetris) : ''}
 
     <div class="glass-card" style="margin-top:8px">
@@ -87,6 +89,7 @@ function renderSettings2(s) {
 
     <button class="btn btn-ghost" onclick="goTo('hoy')" style="margin-top:12px">← VOLVER A HOY</button>
   `;
+  if (typeof iaCargarAjustes === 'function') iaCargarAjustes();
 }
 
 // ── VOZ DEL MÓVIL ────────────────────────────────────────

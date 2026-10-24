@@ -130,7 +130,12 @@ async function apiFetch(path, opts = {}) {
   if (res.status === 401) { showLock(); return null; }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `HTTP ${res.status}`);
+    // El estado y el código viajan con el error: la IA los necesita para
+    // decir qué ha pasado (sin clave, tope del mes…) en vez de "HTTP 402".
+    const e = new Error(err.error || `HTTP ${res.status}`);
+    e.status = res.status;
+    if (err.codigo) e.codigo = err.codigo;
+    throw e;
   }
   return res.json();
 }
@@ -242,12 +247,13 @@ const NAV_COUNT    = NAV_SECTIONS.length;
 // Todas las secciones a las que se puede ir. Estas no tienen pestaña propia:
 // 'gram' y 'exam' se entran desde HOY, y 'progreso' y 'ajustes' desde la
 // cabecera.
-const SECTIONS = [...NAV_SECTIONS, 'gram', 'exam', 'escribir', 'progreso', 'ajustes'];
+const SECTIONS = [...NAV_SECTIONS, 'gram', 'exam', 'escribir', 'progreso', 'ajustes', 'charla'];
 
 // Secciones que son "hijas" de una pestaña: mientras estás dentro, la pestaña
 // madre se queda marcada para no perder de vista dónde estás. Gramática y
 // Examen ya no cuelgan de ninguna: son destinos sueltos y la barra se apaga.
-const PESTANA_MADRE = {};
+// CONVERSAR (la conversación con IA) cuelga de HABLAR.
+const PESTANA_MADRE = { charla: 'speak' };
 
 /**
  * `render: false` entra en la sección pero NO dispara su carga automática. Lo
@@ -295,7 +301,7 @@ function goTo(sec, opts = {}) {
 
   // Disparar render de sección si existe
   if (opts.render === false) return;
-  const renders = { work: renderWork, vocab: renderVocab, speak: renderSpeak, pron: renderPron, gram: renderGrammar, exam: renderExam, escribir: renderEscribir, progreso: renderProgress, ajustes: renderSettings };
+  const renders = { work: renderWork, vocab: renderVocab, speak: renderSpeak, pron: renderPron, gram: renderGrammar, exam: renderExam, escribir: renderEscribir, progreso: renderProgress, ajustes: renderSettings, charla: renderCharla };
   if (renders[sec]) renders[sec]();
 }
 
@@ -727,6 +733,7 @@ function renderPron()     { if (typeof initPron     === 'function') initPron(); 
 function renderGrammar()  { if (typeof initGrammar  === 'function') initGrammar();  }
 function renderExam()     { if (typeof initExam     === 'function') initExam();     }
 function renderProgress() { if (typeof initProgress === 'function') initProgress(); }
+function renderCharla()   { if (typeof charlaIniciar === 'function') charlaIniciar(); }
 // ESCRIBIR no tiene módulo propio: vive en writing.js, que hasta el 12-ago sólo
 // se cargaba desde dentro de SIMULACROS.
 function renderEscribir() {
@@ -799,7 +806,7 @@ async function initApp() {
 
 // Se sube a mano en cada despliegue que cambie el frontend. Se ve en Ajustes,
 // para poder comprobar qué está corriendo el móvil sin adivinarlo.
-const APP_VERSION = 'v21 · 28-sep-2026';
+const APP_VERSION = 'v22 · 24-oct-2026';
 
 function pintarVersion() {
   const el = document.getElementById('version-app');

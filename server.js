@@ -120,6 +120,10 @@ const fechas      = require('./lib/fechas');
 const tetris      = require('./lib/tetris');
 const { fasesFrances } = require('./lib/fases');
 const { IDIOMAS, esIdioma, normalizarIdioma } = require('./lib/idiomas');
+const ia        = require('./lib/ia');
+const iaP       = require('./lib/ia-prompts');
+const iaPerfil  = require('./lib/ia-perfil');
+const { iaMock } = require('./lib/ia-mock');
 
 // ── IDIOMA ACTIVO ────────────────────────────────────────
 // Desde el 27-sep-2026 la app entrena inglés Y francés. El contenido lleva una
@@ -408,6 +412,12 @@ app.use((req, res, next) => {
 
   if (path === '/idioma' && method === 'GET') {
     return res.json({ idioma: 'fr', idiomas: IDIOMAS, tetris_activo: true });
+  }
+
+  // IA: respuestas con la forma real, para construir las pantallas sin gastar.
+  if (path.startsWith('/ia/')) {
+    const r = iaMock(path, method, { ...req.query, ...(req.body || {}) });
+    if (r) return res.json(r);
   }
 
   // POST/PUT — respuestas genéricas en mock
@@ -896,7 +906,10 @@ app.get('/stats', async (req, res) => {
 // prepararVapid). La privada firma los avisos: por esta puerta genérica no se
 // lee ni se escribe. Cambiarla desde fuera, además, dejaría sin avisos a todos
 // los móviles suscritos.
-const CONFIG_RESERVADA = /^vapid_/;
+//
+// Lo mismo con `ia_clave` (la clave de la API de Claude, si se puso desde
+// Ajustes): se escribe por PUT /ia/clave y no se devuelve nunca.
+const CONFIG_RESERVADA = /^(vapid_|ia_clave)/;
 
 app.get('/config/:key', async (req, res) => {
   if (CONFIG_RESERVADA.test(req.params.key)) return res.status(403).json({ error: 'Clave reservada' });
@@ -1466,17 +1479,21 @@ app.get('/writing/tasks/:slug', async (req, res) => {
 });
 
 app.post('/writing/submissions', async (req, res) => {
-  const { task_id, body, content, achievement, organisation, language, notes } = req.body || {};
+  const { task_id, body, content, achievement, organisation, language, notes, ia_feedback } = req.body || {};
   if (!task_id || !body) return res.status(400).json({ error: 'task_id y body requeridos' });
+  // La corrección de la IA (POST /ia/escritura) viaja con el texto si se pidió.
+  // Con tope de tamaño: es un JSON que manda el cliente.
+  const feedback = ia_feedback && typeof ia_feedback === 'object' ? JSON.stringify(ia_feedback) : null;
+  if (feedback && feedback.length > 100_000) return res.status(400).json({ error: 'ia_feedback demasiado grande' });
   // Se cuenta igual que Cambridge: por palabras separadas por espacios.
   const words = String(body).trim().split(/\s+/).filter(Boolean).length;
   try {
     const { rows } = await db(
       `INSERT INTO writing_submissions
-         (profile_id, task_id, body, word_count, content, achievement, organisation, language, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+         (profile_id, task_id, body, word_count, content, achievement, organisation, language, notes, ia_feedback)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
       [PROFILE_ID, task_id, body, words,
-       content ?? null, achievement ?? null, organisation ?? null, language ?? null, notes || null]
+       content ?? null, achievement ?? null, organisation ?? null, language ?? null, notes || null, feedback]
     );
     // Si se ha autopuntuado, cuenta como intento de la destreza — pero sólo
     // si la tarea es de nivel de examen (C1). Un 18/20 en un correo de B1 a la
@@ -1489,7 +1506,7 @@ app.post('/writing/submissions', async (req, res) => {
       await db(
         `INSERT INTO exam_attempts (profile_id, date, section, score, max_score, notes, lang)
          VALUES ($1,$2,'writing',$3,20,$4,$5)`,
-        [PROFILE_ID, todayStr(), total, `Writing · ${words} palabras`, tarea.lang]
+        [PROFILE_ID, todayStr(), total, `Writing · ${words} palabras${feedback ? ' · corregido con IA' : ''}`, tarea.lang]
       );
     }
     await db(
@@ -1521,6 +1538,588 @@ app.get('/speaking/tasks', async (req, res) => {
       'SELECT * FROM speaking_tasks WHERE lang = $1 ORDER BY part, nivel, id', [await idiomaDe(req)]);
     res.json(rows);
   } catch (e) { fallo(res, e); }
+});
+
+// ════════════════════════════════════════════════════════
+// IA — la API de Claude (23-oct-2026)
+// ════════════════════════════════════════════════════════
+// El motor está en lib/ia.js, los prompts en lib/ia-prompts.js y el perfil del
+// alumno en lib/ia-perfil.js. Aquí sólo hay rutas y tres guardas que se pasan
+// siempre, en este orden, antes de gastar un céntimo:
+//
+//  1. Hay clave (variable ANTHROPIC_API_KEY en Render, o la puesta en Ajustes).
+//  2. Hay APP_TOKEN. Sin él la API está abierta, y cualquiera que conozca la URL
+//     estaría gastando el crédito.
+//  3. No se ha pasado el tope del mes (config.ia_tope_mes) ni hay una ráfaga
+//     rara (más de 40 llamadas en 10 minutos: eso es un bucle, no una persona).
+//
+// Cada llamada, buena o mala, deja una fila en ia_uso con su coste. Los
+// errores de la API llegan con un código propio (`codigo`) y un mensaje que se
+// puede enseñar tal cual: `fallo()` los taparía todos con la misma frase.
+
+const frenoIA = ia.crearFreno();
+// Una petición idéntica, una llamada (ver crearUnaVez en lib/ia.js).
+const unaVezIA = ia.crearUnaVez();
+const huellaIA = (...partes) => crypto.createHash('sha256').update(JSON.stringify(partes)).digest('hex');
+
+// Lo que puede tardar cada función, por intento, y cuántas veces se reintenta.
+// El móvil espera más que el peor caso (IA_TIEMPO_CORTO / IA_TIEMPO_MAX en
+// src/js/ia.js): si se rinde antes, el servidor sigue y cobra igual. Un
+// reintento basta: los 529 (sobrecarga) vuelven en un instante y el segundo
+// intento suele entrar; un tercero sólo alargaba la espera.
+const TIEMPOS_IA = {
+  pronunciacion: { timeout: 40_000, maxRetries: 1 },
+  conversacion:  { timeout: 40_000, maxRetries: 1 },
+  prueba:        { timeout: 40_000, maxRetries: 1 },
+  escritura:     { timeout: 100_000, maxRetries: 1 },
+  oral:          { timeout: 100_000, maxRetries: 1 },
+  consejo:       { timeout: 100_000, maxRetries: 1 },
+};
+
+const ESTADO_HTTP_IA = {
+  sin_clave: 503, sin_token: 403, tope: 402, freno: 429, sin_credito: 402,
+  clave_mala: 502, limite: 429, rechazo: 422, incompleta: 502, api: 502,
+};
+
+async function claveIA() {
+  if (process.env.ANTHROPIC_API_KEY) return { clave: process.env.ANTHROPIC_API_KEY, origen: 'entorno' };
+  const c = await leerConfig(['ia_clave']);
+  return c.ia_clave ? { clave: c.ia_clave, origen: 'ajustes' } : { clave: null, origen: null };
+}
+
+async function ajustesIA() {
+  const c = await leerConfig(['ia_modelo', 'ia_tope_mes', 'ia_credito']);
+  const tope = Number(c.ia_tope_mes);
+  const credito = Number(c.ia_credito);
+  return {
+    modelo: ia.esModelo(c.ia_modelo) ? c.ia_modelo : ia.MODELO_POR_DEFECTO,
+    tope_mes: Number.isFinite(tope) && tope >= 0 ? tope : 15,
+    credito: Number.isFinite(credito) && credito >= 0 ? credito : 100,
+  };
+}
+
+const mesIA = () => todayStr().slice(0, 7);
+
+async function gastoIA() {
+  const { rows: [g] } = await db(
+    `SELECT COALESCE(SUM(coste_usd) FILTER (WHERE mes = $2), 0)::float AS mes,
+            COALESCE(SUM(coste_usd), 0)::float AS total,
+            COUNT(*) FILTER (WHERE mes = $2)::int AS llamadas_mes
+       FROM ia_uso WHERE profile_id = $1`, [PROFILE_ID, mesIA()]);
+  return g;
+}
+
+/** Los errores vivos del alumno en un idioma, los más repetidos primero. */
+async function perfilIA(lang, limite = 12) {
+  const { rows } = await db(
+    `SELECT tipo, clave, mal, bien, veces FROM ia_errores
+      WHERE profile_id = $1 AND lang = $2 AND NOT superado
+      ORDER BY veces DESC, ultima DESC LIMIT $3`, [PROFILE_ID, lang, limite]);
+  return rows;
+}
+
+async function anotarUsoIA(funcion, lang, r, error = null) {
+  try {
+    await db(
+      `INSERT INTO ia_uso (profile_id, mes, funcion, lang, modelo, servido_por,
+         tokens_entrada, tokens_salida, cache_leida, cache_escrita, coste_usd, ok, error)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      [PROFILE_ID, mesIA(), funcion, lang || null, r?.modelo || 'desconocido', r?.servidoPor || null,
+       r?.tokens?.entrada || 0, r?.tokens?.salida || 0, r?.tokens?.cache_leida || 0, r?.tokens?.cache_escrita || 0,
+       r?.coste || 0, !error, error]);
+  } catch (e) { console.error('[ia] no se pudo anotar el uso:', e.message); }
+}
+
+/**
+ * Las tres guardas y la llamada. Devuelve el resultado de `llamarClaude` o
+ * lanza ErrorIA. Lo que cueste queda anotado aunque la respuesta no sirva.
+ */
+async function pedirIA({ funcion, lang, sistema, usuario, esquema, effort, maxTokens }) {
+  if (!APP_TOKEN && process.env.NODE_ENV !== 'development') {
+    throw new ia.ErrorIA('sin_token', 'La IA necesita que la app tenga clave de acceso (APP_TOKEN): sin ella cualquiera podría gastar tu crédito.');
+  }
+  const { clave } = await claveIA();
+  if (!clave) throw new ia.ErrorIA('sin_clave', 'Falta la clave de la API de Claude. Ponla en Ajustes › IA.');
+  const aj = await ajustesIA();
+  const g = await gastoIA();
+  if (g.mes >= aj.tope_mes) {
+    throw new ia.ErrorIA('tope', `Este mes ya se han gastado ${g.mes.toFixed(2)} $ de un tope de ${aj.tope_mes} $. Puedes subirlo en Ajustes › IA.`);
+  }
+  if (!frenoIA.permitir()) {
+    throw new ia.ErrorIA('freno', 'Demasiadas peticiones seguidas a la IA. Espera unos minutos.');
+  }
+  const t0 = Date.now();
+  try {
+    const r = await ia.llamarClaude({
+      cliente: ia.clienteCon(clave, process.env.ANTHROPIC_BASE_URL ? { baseURL: process.env.ANTHROPIC_BASE_URL } : {}),
+      modelo: aj.modelo, sistema, usuario, esquema, effort, maxTokens,
+      ...(TIEMPOS_IA[funcion] || TIEMPOS_IA.escritura),
+    });
+    await anotarUsoIA(funcion, lang, r);
+    console.log(`[ia] ${funcion} ${lang || ''} · ${r.servidoPor}${r.fallback ? ' (reenvío)' : ''} · ${r.tokens.entrada}+${r.tokens.cache_leida}c/${r.tokens.salida} tok · ${r.coste.toFixed(4)} $ · ${Date.now() - t0} ms`);
+    return r;
+  } catch (e) {
+    if (e instanceof ia.ErrorIA) {
+      await anotarUsoIA(funcion, lang, { modelo: aj.modelo, servidoPor: e.servidoPor, tokens: e.tokens, coste: e.coste }, e.codigo);
+      console.error(`[ia] ${funcion} ${lang || ''} · ${e.codigo}: ${e.message}`);
+    }
+    throw e;
+  }
+}
+
+/**
+ * Responde con lo que devuelva `fn` o, si esta misma petición se acaba de hacer
+ * (un reintento tras un corte), con la respuesta guardada: gratis, sin volver a
+ * guardar nada ni a contar los errores otra vez.
+ */
+async function responderUnaVezIA(res, clave, fn) {
+  const { valor, repetida } = await unaVezIA.hacer(clave, fn);
+  res.json(repetida ? { ...valor, coste: 0, tarjetas: [], repetida: true } : valor);
+}
+
+function falloIA(res, e) {
+  if (e instanceof ia.ErrorIA) {
+    return res.status(ESTADO_HTTP_IA[e.codigo] || 502).json({ error: e.message, codigo: e.codigo });
+  }
+  return fallo(res, e);
+}
+
+/**
+ * Cuenta los errores que ha visto Claude y convierte en tarjeta del SRS los que
+ * se repiten (lib/ia-perfil.js). Devuelve las tarjetas creadas en esta llamada.
+ * Si algo falla aquí, la corrección se entrega igual: el perfil es un extra.
+ */
+async function registrarErroresIA(lang, errores, origen) {
+  const nuevas = [];
+  try {
+    const lista = iaPerfil.prepararErrores(errores);
+    if (!lista.length) return nuevas;
+    const { rows: [h] } = await db(
+      `SELECT COUNT(*)::int AS n FROM user_words uw JOIN words w ON w.id = uw.word_id
+        WHERE uw.profile_id = $1 AND w.category = 'errores' AND uw.created_at >= NOW() - INTERVAL '1 day'`,
+      [PROFILE_ID]);
+    let hoy = h.n;
+    for (const e of lista) {
+      const { rows: [fila] } = await db(
+        `INSERT INTO ia_errores (profile_id, lang, tipo, clave, mal, bien, traduccion, explicacion, origen)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         ON CONFLICT (profile_id, lang, tipo, clave) DO UPDATE SET
+           veces = ia_errores.veces + 1, ultima = NOW(), superado = FALSE, origen = EXCLUDED.origen,
+           mal = EXCLUDED.mal, bien = EXCLUDED.bien,
+           traduccion = COALESCE(NULLIF(EXCLUDED.traduccion, ''), ia_errores.traduccion),
+           explicacion = EXCLUDED.explicacion
+         RETURNING id, veces, word_id`,
+        [PROFILE_ID, lang, e.tipo, e.clave, e.mal, e.bien, e.traduccion, e.explicacion, origen]);
+      if (fila.word_id || hoy >= iaPerfil.MAX_TARJETAS_DIA || !iaPerfil.mereceTarjeta(e, fila.veces)) continue;
+      const t = iaPerfil.tarjetaDeError(e);
+      // Sin índice único en words: se busca antes por texto, como hacen las
+      // migraciones de contenido, para no duplicar una palabra que ya existe.
+      let { rows: [w] } = await db(
+        `SELECT id FROM words WHERE lang = $1 AND lower(word) = lower($2) LIMIT 1`, [lang, t.word]);
+      if (!w) {
+        ({ rows: [w] } = await db(
+          `INSERT INTO words (word, translation, example_sentence, level, category, lang)
+           VALUES ($1,$2,$3,'B1','errores',$4) RETURNING id`,
+          [t.word, t.translation, t.example_sentence, lang]));
+      }
+      const { rowCount } = await db(
+        `INSERT INTO user_words (profile_id, word_id, next_review_date) VALUES ($1,$2,$3)
+         ON CONFLICT (profile_id, word_id) DO NOTHING`, [PROFILE_ID, w.id, todayStr()]);
+      await db('UPDATE ia_errores SET word_id = $1 WHERE id = $2', [w.id, fila.id]);
+      if (rowCount) { nuevas.push({ word: t.word, id: w.id }); hoy++; }
+    }
+  } catch (e) { console.error('[ia] perfil:', e.message); }
+  return nuevas;
+}
+
+/** HABLAR cuenta como hecho sólo si se habló con el micrófono (ver CLAUDE.md). */
+async function marcarHabladoIA(nota, score = null) {
+  await db(
+    `INSERT INTO study_sessions (profile_id, date, type, duration_minutes, score, notes)
+     VALUES ($1, $2, 'speaking', 5, $3, $4)`, [PROFILE_ID, todayStr(), score, nota]);
+  await db(
+    `INSERT INTO daily_goals (profile_id, date, speaking_done, vocab_target)
+     VALUES ($1, $2, TRUE, ${SQL_META_VOCAB})
+     ON CONFLICT (profile_id, date) DO UPDATE SET speaking_done = TRUE`, [PROFILE_ID, todayStr()]);
+  await recomputeStreak(todayStr());
+}
+
+const langDeCuerpo = async (req) => (esIdioma(req.body?.lang) ? req.body.lang : idiomaActivo());
+const textoDe = (v, max) => ia.recortar(typeof v === 'string' ? v : '', max);
+
+// ── Estado, clave y ajustes ──────────────────────────────
+
+app.get('/ia/estado', async (req, res) => {
+  try {
+    const [{ clave, origen }, aj, g] = await Promise.all([claveIA(), ajustesIA(), gastoIA()]);
+    res.json({
+      disponible: !!clave && (!!APP_TOKEN || process.env.NODE_ENV === 'development'),
+      origen_clave: origen,
+      clave_final: clave ? clave.slice(-4) : null,
+      sin_token: !APP_TOKEN,
+      modelo: aj.modelo,
+      modelos: Object.entries(ia.MODELOS).map(([id, m]) => ({ id, nombre: m.nombre, entrada: m.entrada, salida: m.salida })),
+      tope_mes: aj.tope_mes,
+      gasto_mes: g.mes, gasto_total: g.total, llamadas_mes: g.llamadas_mes,
+      credito: aj.credito, credito_restante: Math.max(0, aj.credito - g.total),
+    });
+  } catch (e) { fallo(res, e); }
+});
+
+// La clave se comprueba antes de guardarla con una consulta que no gasta
+// (los datos de un modelo). Se guarda en config y no vuelve a salir nunca.
+app.put('/ia/clave', async (req, res) => {
+  if (process.env.ANTHROPIC_API_KEY) {
+    return res.status(409).json({ error: 'La clave está puesta en Render (ANTHROPIC_API_KEY) y manda sobre la de Ajustes.' });
+  }
+  const clave = String(req.body?.clave || '').trim();
+  if (!/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(clave)) {
+    return res.status(400).json({ error: 'Eso no parece una clave de la API de Claude (empiezan por sk-ant-).' });
+  }
+  try {
+    const aj = await ajustesIA();
+    try {
+      await ia.clienteCon(clave, process.env.ANTHROPIC_BASE_URL ? { baseURL: process.env.ANTHROPIC_BASE_URL } : {})
+        .models.retrieve(aj.modelo);
+    } catch (e) {
+      const st = e?.status;
+      if (st === 401 || st === 403) return res.status(400).json({ error: 'La API dice que esa clave no es válida.' });
+      return res.status(502).json({ error: `No se pudo comprobar la clave (${st || 'sin conexión'}).` });
+    }
+    await db(`INSERT INTO config (key, value) VALUES ('ia_clave', $1)
+              ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [clave]);
+    res.json({ ok: true, clave_final: clave.slice(-4) });
+  } catch (e) { fallo(res, e); }
+});
+
+app.delete('/ia/clave', async (req, res) => {
+  try {
+    await db(`DELETE FROM config WHERE key = 'ia_clave'`);
+    res.json({ ok: true });
+  } catch (e) { fallo(res, e); }
+});
+
+app.put('/ia/ajustes', async (req, res) => {
+  const { modelo, tope_mes, credito } = req.body || {};
+  const cambios = [];
+  if (modelo !== undefined) {
+    if (!ia.esModelo(modelo)) return res.status(400).json({ error: 'Modelo desconocido' });
+    cambios.push(['ia_modelo', modelo]);
+  }
+  for (const [k, v] of [['ia_tope_mes', tope_mes], ['ia_credito', credito]]) {
+    if (v === undefined) continue;
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < 0 || n > 1000) return res.status(400).json({ error: `${k} tiene que ser un número entre 0 y 1000` });
+    cambios.push([k, String(n)]);
+  }
+  try {
+    for (const [k, v] of cambios) {
+      await db(`INSERT INTO config (key, value) VALUES ($1,$2)
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [k, v]);
+    }
+    res.json(await ajustesIA());
+  } catch (e) { fallo(res, e); }
+});
+
+// ── Pronunciación ────────────────────────────────────────
+// Recibe lo que entendió el reconocedor (o el dictado) frente a la frase
+// objetivo. En inglés, la figurada de las palabras sale de la app y no de
+// Claude: así la notación es siempre la misma que en el resto de pantallas.
+app.post('/ia/pronunciacion', async (req, res) => {
+  const objetivo = textoDe(req.body?.objetivo, 300);
+  if (!objetivo) return res.status(400).json({ error: 'objetivo requerido' });
+  const alternativas = (Array.isArray(req.body?.alternativas) ? req.body.alternativas : [])
+    .slice(0, 6)
+    .map((a) => ({ transcript: textoDe(a?.transcript, 300), confidence: Number(a?.confidence) || 0 }))
+    .filter((a) => a.transcript);
+  try {
+    const lang = await langDeCuerpo(req);
+    await responderUnaVezIA(res, huellaIA('pronunciacion', lang, objetivo, alternativas), async () => {
+      let figurada = [];
+      if (lang === 'en') {
+        const palabras = [...new Set(pron.palabrasDe(objetivo))].slice(0, 14);
+        const buscar = await cargarIpa(palabras.join(' '));
+        figurada = palabras
+          .map((p) => ({ palabra: p, f: pron.figurarPalabra(p, buscar) }))
+          .filter((x) => x.f?.texto)
+          .map((x) => ({ palabra: x.palabra, figurada: x.f.texto }));
+      }
+      const r = await pedirIA({
+        funcion: 'pronunciacion', lang,
+        sistema: iaP.SISTEMA_PRONUNCIACION,
+        usuario: iaP.mensajePronunciacion({ lang, objetivo, alternativas, figurada, perfil: await perfilIA(lang) }),
+        esquema: iaP.RespuestaPronunciacion, effort: 'low', maxTokens: 4000,
+      });
+      const d = r.datos;
+      const figDe = new Map(figurada.map((f) => [f.palabra.toLowerCase(), f.figurada]));
+      const tarjetas = await registrarErroresIA(lang, d.errores, 'pronunciacion');
+      return {
+        ...d,
+        puntuacion: iaP.acotar(d.puntuacion, 0, 100),
+        palabras: (d.palabras || []).slice(0, 6).map((p) => ({ ...p, figurada: figDe.get(String(p.palabra).toLowerCase()) || null })),
+        coste: r.coste, tarjetas,
+      };
+    });
+  } catch (e) { falloIA(res, e); }
+});
+
+// ── Conversación ─────────────────────────────────────────
+// Una situación del sector (o un escenario libre) y Claude hace de la otra
+// persona. El historial lo guarda el cliente y viaja en cada turno, recortado.
+app.post('/ia/conversacion', async (req, res) => {
+  const b = req.body || {};
+  const mensaje = textoDe(b.mensaje, 500);
+  const historial = (Array.isArray(b.historial) ? b.historial : [])
+    .slice(-16)
+    .map((t) => ({ rol: t?.rol === 'alumno' ? 'alumno' : 'ia', texto: textoDe(t?.texto, 400) }))
+    .filter((t) => t.texto);
+  try {
+    let lang = await langDeCuerpo(req);
+    let situacion, papel;
+    if (b.situacion_id) {
+      const { rows: [s] } = await db(
+        `SELECT s.id, s.title_es, s.title_en, s.context_es, s.level, t.lang, t.name AS sector
+           FROM situations s JOIN tracks t ON t.id = s.track_id WHERE s.id = $1`, [b.situacion_id]);
+      if (!s) return res.status(404).json({ error: 'Situación no encontrada' });
+      lang = s.lang;
+      const { rows: lineas } = await db(
+        `SELECT kind, en FROM situation_lines
+          WHERE situation_id = $1 AND kind IN ('customer','you') ORDER BY order_index LIMIT 12`, [s.id]);
+      const de = (k) => lineas.filter((l) => l.kind === k).slice(0, 3).map((l) => `«${l.en}»`).join(', ');
+      situacion = `${s.title_es} (${s.title_en}), en el sector «${s.sector}». ${s.context_es || ''}`.trim();
+      papel = `Haces de la otra persona de la escena: en el guion de la app dice frases como ${de('customer') || '(sin ejemplos)'}. ` +
+        `El alumno hace el papel que en el guion dice frases como ${de('you') || '(sin ejemplos)'}. Puedes salirte del guion con naturalidad.`;
+    } else {
+      situacion = textoDe(b.escenario, 300);
+      papel = textoDe(b.papel, 200) || 'La persona con la que el alumno tendría que hablar en esa situación.';
+      if (!situacion) return res.status(400).json({ error: 'situacion_id o escenario requerido' });
+    }
+    const c = await leerConfig([lang === 'fr' ? 'nivel_medido_fr' : 'nivel_medido']);
+    const nivel = c.nivel_medido_fr || c.nivel_medido || null;
+    const turno = async () => {
+      const r = await pedirIA({
+        funcion: 'conversacion', lang,
+        sistema: iaP.SISTEMA_CONVERSACION,
+        usuario: iaP.mensajeConversacion({ lang, situacion, papel, nivel, historial, mensaje, perfil: await perfilIA(lang) }),
+        esquema: iaP.RespuestaConversacion, effort: 'low', maxTokens: 3000,
+      });
+      const d = r.datos;
+      const tarjetas = mensaje ? await registrarErroresIA(lang, d.errores, 'conversacion') : [];
+      // Hablar con el micrófono en una conversación es hablar: marca HABLAR.
+      // Con el dictado del teclado no hay forma de saber si se dictó o se tecleó,
+      // así que no cuenta (la regla de las metas que se marcan solas).
+      if (mensaje && b.via === 'voz') await marcarHabladoIA('Conversación con IA');
+      return { ...d, sugerencias: (d.sugerencias || []).slice(0, 3), lang, coste: r.coste, tarjetas };
+    };
+    // La apertura (sin mensaje) no se recuerda: OTRA VEZ en la misma escena
+    // tiene que poder empezar de otra forma.
+    if (!mensaje) return res.json(await turno());
+    await responderUnaVezIA(res,
+      huellaIA('conversacion', lang, situacion, papel, historial, mensaje, b.via === 'voz'), turno);
+  } catch (e) { falloIA(res, e); }
+});
+
+// ── Escritura ────────────────────────────────────────────
+// Corrige; no guarda. El cliente rellena la rúbrica con las notas de la IA y
+// el alumno guarda con GUARDAR como siempre (POST /writing/submissions, que
+// ahora acepta `ia_feedback`). Así la regla de "sólo C1 cuenta como examen"
+// sigue en un único sitio.
+app.post('/ia/escritura', async (req, res) => {
+  const texto = textoDe(req.body?.texto, 9000);
+  const taskId = parseInt(req.body?.task_id, 10);
+  if (!taskId) return res.status(400).json({ error: 'task_id requerido' });
+  const palabras = iaP.contarPalabras(texto);
+  if (palabras < 15) return res.status(400).json({ error: 'Escribe al menos 15 palabras para que haya algo que corregir.' });
+  try {
+    const { rows: [tarea] } = await db('SELECT * FROM writing_tasks WHERE id = $1', [taskId]);
+    if (!tarea) return res.status(404).json({ error: 'Tarea no encontrada' });
+    await responderUnaVezIA(res, huellaIA('escritura', taskId, texto), async () => {
+      const r = await pedirIA({
+        funcion: 'escritura', lang: tarea.lang,
+        sistema: iaP.SISTEMA_ESCRITURA,
+        usuario: iaP.mensajeEscritura({ tarea, texto, palabras, perfil: await perfilIA(tarea.lang) }),
+        esquema: iaP.RespuestaEscritura, effort: 'medium', maxTokens: 16000,
+      });
+      const d = r.datos;
+      const notas = Object.fromEntries(['content', 'achievement', 'organisation', 'language']
+        .map((k) => [k, iaP.acotar(d.notas?.[k], 0, 5)]));
+      const tarjetas = await registrarErroresIA(tarea.lang, d.errores, 'escritura');
+      return {
+        ...d, notas, total: Object.values(notas).reduce((a, b) => a + b, 0),
+        correcciones: (d.correcciones || []).slice(0, 15),
+        cuenta_examen: tarea.nivel === 'C1', coste: r.coste, tarjetas,
+      };
+    });
+  } catch (e) { falloIA(res, e); }
+});
+
+// ── Oral ─────────────────────────────────────────────────
+// Antes las tareas orales sólo tenían cronómetro y no quedaba nada. Ahora se
+// guarda la transcripción y la corrección (speaking_submissions) y, si es C1,
+// cuenta como intento de examen con el idioma de la tarea.
+app.post('/ia/oral', async (req, res) => {
+  const b = req.body || {};
+  const transcripcion = textoDe(b.transcripcion, 9000);
+  const taskId = parseInt(b.task_id, 10);
+  const segundos = Math.max(0, Math.min(3600, parseInt(b.segundos, 10) || 0)) || null;
+  const via = b.via === 'voz' ? 'voz' : 'texto';
+  if (!taskId) return res.status(400).json({ error: 'task_id requerido' });
+  const palabras = iaP.contarPalabras(transcripcion);
+  if (palabras < 10) return res.status(400).json({ error: 'Hace falta algo más de habla para corregir: al menos 10 palabras.' });
+  try {
+    const { rows: [tarea] } = await db('SELECT * FROM speaking_tasks WHERE id = $1', [taskId]);
+    if (!tarea) return res.status(404).json({ error: 'Tarea no encontrada' });
+    const cuenta_examen = tarea.nivel === 'C1';
+    // El oral se GUARDA, así que un reintento no puede llegar a la IA: ni
+    // pagaría otra vez, sino que dejaría dos entregas (y dos notas de examen en
+    // C1). La memoria de unaVezIA se pierde cuando Render duerme la app; la
+    // base, no.
+    const { rows: [ya] } = await db(
+      `SELECT id, ia_feedback FROM speaking_submissions
+        WHERE profile_id = $1 AND task_id = $2 AND transcript = $3
+          AND created_at > NOW() - INTERVAL '15 minutes'
+        ORDER BY id DESC LIMIT 1`, [PROFILE_ID, taskId, transcripcion]);
+    if (ya?.ia_feedback) {
+      const f = typeof ya.ia_feedback === 'string' ? JSON.parse(ya.ia_feedback) : ya.ia_feedback;
+      const total = Object.values(f.notas || {}).reduce((a, x) => a + (Number(x) || 0), 0);
+      return res.json({ id: ya.id, ...f, total, cuenta_examen, coste: 0, tarjetas: [], repetida: true });
+    }
+    await responderUnaVezIA(res, huellaIA('oral', taskId, transcripcion), async () => {
+      const r = await pedirIA({
+        funcion: 'oral', lang: tarea.lang,
+        sistema: iaP.SISTEMA_ORAL,
+        usuario: iaP.mensajeOral({ tarea, transcripcion, segundos, palabras, via, perfil: await perfilIA(tarea.lang) }),
+        esquema: iaP.RespuestaOral, effort: 'medium', maxTokens: 12000,
+      });
+      const d = r.datos;
+      const notas = Object.fromEntries(['gramatica', 'lexico', 'discurso', 'tarea']
+        .map((k) => [k, iaP.acotar(d.notas?.[k], 0, 5)]));
+      const total = Object.values(notas).reduce((a, x) => a + x, 0);
+      const feedback = { ...d, notas };
+      const { rows: [fila] } = await db(
+        `INSERT INTO speaking_submissions (profile_id, task_id, lang, transcript, segundos, via,
+           gramatica, lexico, discurso, tarea, nivel_estimado, ia_feedback)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+        [PROFILE_ID, taskId, tarea.lang, transcripcion, segundos, via,
+         notas.gramatica, notas.lexico, notas.discurso, notas.tarea, d.nivel_estimado, JSON.stringify(feedback)]);
+      // Igual que en ESCRIBIR: sólo una tarea C1 dice algo del nivel de examen.
+      if (cuenta_examen) {
+        await db(
+          `INSERT INTO exam_attempts (profile_id, date, section, score, max_score, notes, lang)
+           VALUES ($1,$2,'speaking',$3,20,$4,$5)`,
+          [PROFILE_ID, todayStr(), total, `Oral · parte ${tarea.part} · corregido con IA`, tarea.lang]);
+      }
+      if (via === 'voz') await marcarHabladoIA(`Oral: ${tarea.title}`.slice(0, 200));
+      await addXp(20);
+      const tarjetas = await registrarErroresIA(tarea.lang, d.errores, 'oral');
+      return { id: fila.id, ...feedback, total, cuenta_examen, coste: r.coste, tarjetas };
+    });
+  } catch (e) { falloIA(res, e); }
+});
+
+// ── Perfil del alumno ────────────────────────────────────
+app.get('/ia/perfil', async (req, res) => {
+  try {
+    const lang = await idiomaDe(req);
+    const { rows: errores } = await db(
+      `SELECT id, tipo, clave, mal, bien, traduccion, explicacion, origen, veces, primera, ultima, word_id, superado
+         FROM ia_errores WHERE profile_id = $1 AND lang = $2
+        ORDER BY superado, veces DESC, ultima DESC LIMIT 40`, [PROFILE_ID, lang]);
+    const por_tipo = {};
+    for (const e of errores) if (!e.superado) por_tipo[e.tipo] = (por_tipo[e.tipo] || 0) + 1;
+    res.json({ lang, errores, por_tipo, tarjetas: errores.filter((e) => e.word_id).length });
+  } catch (e) { fallo(res, e); }
+});
+
+// "Ya no lo fallo": deja de enviarse en los prompts. Si vuelve a aparecer,
+// registrarErroresIA lo reactiva solo.
+app.put('/ia/perfil/:id', async (req, res) => {
+  try {
+    const { rows } = await db(
+      `UPDATE ia_errores SET superado = $1 WHERE id = $2 AND profile_id = $3 RETURNING id, superado`,
+      [!!req.body?.superado, req.params.id, PROFILE_ID]);
+    if (!rows.length) return res.status(404).json({ error: 'No encontrado' });
+    res.json(rows[0]);
+  } catch (e) { fallo(res, e); }
+});
+
+// ── Consejo: el tutor mira tus datos y prioriza la semana ─
+async function resumenAlumno(lang) {
+  const hoy = todayStr();
+  const q = async (sql, p) => (await db(sql, p)).rows;
+  const [[vocab], [repaso], [dias], sits, escritos, orales, examenes, [tetrisR]] = await Promise.all([
+    q(`SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE uw.stability >= 7)::int AS consolidadas,
+              COUNT(*) FILTER (WHERE uw.next_review_date <= $3)::int AS vencidas,
+              COUNT(*) FILTER (WHERE w.category = 'errores')::int AS de_errores
+         FROM user_words uw JOIN words w ON w.id = uw.word_id
+        WHERE uw.profile_id = $1 AND w.lang = $2`, [PROFILE_ID, lang, hoy]),
+    q(`SELECT COUNT(*)::int AS repasos, COUNT(*) FILTER (WHERE r.rating = 1)::int AS fallos
+         FROM review_log r JOIN user_words uw ON uw.id = r.user_word_id JOIN words w ON w.id = uw.word_id
+        WHERE r.profile_id = $1 AND w.lang = $2 AND r.reviewed_at >= NOW() - INTERVAL '7 days'`, [PROFILE_ID, lang]),
+    q(`SELECT COUNT(DISTINCT date)::int AS dias_14, MAX(date)::text AS ultimo
+         FROM study_sessions WHERE profile_id = $1 AND date >= ($2::date - 14)`, [PROFILE_ID, hoy]),
+    q(`SELECT s.title_es, sp.best_score, sp.completed, sp.practiced_count, sp.last_practiced_at::date::text AS ultima
+         FROM situation_progress sp JOIN situations s ON s.id = sp.situation_id JOIN tracks t ON t.id = s.track_id
+        WHERE sp.profile_id = $1 AND t.lang = $2 ORDER BY sp.last_practiced_at DESC NULLS LAST LIMIT 6`, [PROFILE_ID, lang]),
+    q(`SELECT t.title, t.nivel, s.content, s.achievement, s.organisation, s.language, s.created_at::date::text AS fecha
+         FROM writing_submissions s JOIN writing_tasks t ON t.id = s.task_id
+        WHERE s.profile_id = $1 AND t.lang = $2 ORDER BY s.created_at DESC LIMIT 4`, [PROFILE_ID, lang]),
+    q(`SELECT t.title, t.nivel, s.gramatica, s.lexico, s.discurso, s.tarea, s.nivel_estimado, s.created_at::date::text AS fecha
+         FROM speaking_submissions s JOIN speaking_tasks t ON t.id = s.task_id
+        WHERE s.profile_id = $1 AND s.lang = $2 ORDER BY s.created_at DESC LIMIT 4`, [PROFILE_ID, lang]),
+    q(`SELECT section, score, max_score, date::text AS fecha FROM exam_attempts
+        WHERE profile_id = $1 AND lang = $2 ORDER BY date DESC, id DESC LIMIT 8`, [PROFILE_ID, lang]),
+    q(`SELECT COALESCE(SUM(rondas), 0)::int AS rondas_7 FROM tetris_dias
+        WHERE profile_id = $1 AND lang = $2 AND fecha >= ($3::date - 7)`, [PROFILE_ID, lang, hoy]),
+  ]);
+  const c = await leerConfig([lang === 'fr' ? 'nivel_medido_fr' : 'nivel_medido']);
+  const lineas = [
+    `Hoy: ${hoy}.`,
+    `Nivel medido con el test de la app: ${c.nivel_medido_fr || c.nivel_medido || 'sin medir'}.`,
+    `Días con estudio en las dos últimas semanas: ${dias.dias_14} (último: ${dias.ultimo || 'nunca'}).`,
+    `Vocabulario: ${vocab.total} palabras, ${vocab.consolidadas} consolidadas (estabilidad ≥ 7 días), ${vocab.vencidas} pendientes de repaso hoy, ${vocab.de_errores} tarjetas salidas de sus errores.`,
+    `Repaso en 7 días: ${repaso.repasos} repasos, ${repaso.fallos} fallos.`,
+    `Rondas del modo Tetris en 7 días: ${tetrisR.rondas_7}.`,
+    sits.length ? `Situaciones de trabajo recientes:\n${sits.map((s) => `- ${s.title_es}: ${s.practiced_count} veces, mejor ${s.best_score ?? '-'} %, ${s.completed ? 'completada' : 'sin completar'}, última ${s.ultima || '-'}`).join('\n')}` : 'Situaciones de trabajo: ninguna practicada.',
+    escritos.length ? `Escritos recientes (0-5 por criterio):\n${escritos.map((e) => `- ${e.fecha} ${e.title} (${e.nivel}): ${[e.content, e.achievement, e.organisation, e.language].join('/')}`).join('\n')}` : 'Escritos: ninguno.',
+    orales.length ? `Tareas orales recientes (gramática/léxico/discurso/tarea):\n${orales.map((o) => `- ${o.fecha} ${o.title} (${o.nivel}): ${[o.gramatica, o.lexico, o.discurso, o.tarea].join('/')}, nivel estimado ${o.nivel_estimado || '-'}`).join('\n')}` : 'Tareas orales: ninguna.',
+    examenes.length ? `Notas de examen:\n${examenes.map((x) => `- ${x.fecha} ${x.section}: ${x.score}/${x.max_score}`).join('\n')}` : 'Notas de examen: ninguna.',
+  ];
+  return lineas.join('\n');
+}
+
+app.post('/ia/consejo', async (req, res) => {
+  try {
+    const lang = await langDeCuerpo(req);
+    const r = await pedirIA({
+      funcion: 'consejo', lang,
+      sistema: iaP.SISTEMA_CONSEJO,
+      usuario: iaP.mensajeConsejo({ lang, resumen: await resumenAlumno(lang), perfil: await perfilIA(lang, 15) }),
+      esquema: iaP.RespuestaConsejo, effort: 'medium', maxTokens: 6000,
+    });
+    res.json({ ...r.datos, prioridades: (r.datos.prioridades || []).slice(0, 3), lang, coste: r.coste });
+  } catch (e) { falloIA(res, e); }
+});
+
+// ── Prueba: una llamada real de céntimos para ver que todo funciona ─
+// Sale en los registros de Render ([ia] prueba …), que es donde se mira si
+// algo falla en producción.
+app.post('/ia/prueba', async (req, res) => {
+  const t0 = Date.now();
+  try {
+    const r = await pedirIA({
+      funcion: 'prueba', lang: 'fr',
+      sistema: iaP.SISTEMA_PRONUNCIACION,
+      usuario: iaP.mensajePronunciacion({
+        lang: 'fr', objetivo: 'Je voudrais une baguette, s\'il vous plaît.',
+        alternativas: [{ transcript: 'je voudrais une baguette s\'il vous plaît', confidence: 0.92 }],
+        figurada: [], perfil: [],
+      }),
+      esquema: iaP.RespuestaPronunciacion, effort: 'low', maxTokens: 3000,
+    });
+    res.json({ ok: true, modelo: r.servidoPor, coste: r.coste, ms: Date.now() - t0, resumen: r.datos.resumen });
+  } catch (e) { falloIA(res, e); }
 });
 
 // ════════════════════════════════════════════════════════

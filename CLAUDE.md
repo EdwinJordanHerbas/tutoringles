@@ -26,7 +26,7 @@ gratis** (ver "Despliegue").
 |---|---|
 | `npm start` | `node server.js` |
 | `npm run migrate` | `tools/migrar.js`: aplica las migraciones que falten y carga el diccionario |
-| `npm test` | `node --test` — tests nativos de Node (126, de los que 13 se saltan sin servidor) |
+| `npm test` | `node --test` — tests nativos de Node (160, de los que 16 se saltan sin servidor) |
 | `npm run test:fsrs` | tests del algoritmo de repetición espaciada |
 | `node tools/generar-lexico.js` | regenera el diccionario de pronunciación |
 
@@ -139,6 +139,107 @@ Cuatro detalles que costaría redescubrir:
 
 Avisos nuevos: `despertar` (08:00) y `almohada` (22:30), cada uno con su candado en `push_log`
 (tipo distinto) y su `tag`, para que no se tapen entre ellos ni con el diario.
+
+## IA con la API de Claude (23-oct-2026)
+
+Con un crédito de 100 $ en la API de Claude. **Backend y pantallas hechos (24-oct-2026).** Hasta
+que se ponga la clave en Ajustes › IA y PROBAR salga bien, nada de esto ha hablado con la API de
+verdad: todo se probó contra `tools/claude-falso.js`.
+
+- **Motor único: `lib/ia.js` → `llamarClaude()`.** `client.beta.messages.parse` con salida JSON
+  validada por un esquema de Zod (`betaZodOutputFormat`), el prompt de sistema con
+  `cache_control`, `output_config.effort` y, en Opus/Sonnet 5.5, reenvío del lado del servidor
+  en rechazos (`fallbacks: 'default'`, beta `server-side-fallback-2026-07-01`). Opus 5.5 por
+  defecto (`config.ia_modelo`; en Ajustes se puede bajar a Sonnet 5.5 o Haiku 5.5).
+  **El razonamiento en Opus 5.5 no se puede apagar**: el control es `effort` (pronunciación y
+  conversación `low`, escritura/oral/consejo `medium`).
+- **Claude no oye.** Recibe lo que ENTENDIÓ el reconocedor del móvil (alternativas y confianza)
+  o el dictado del teclado, y diagnostica por las diferencias ("sheep" por "ship" = /ɪ/).
+  **En el iPhone con la app instalada no hay `SpeechRecognition`**: toda entrada de voz de la IA
+  tiene que aceptar también texto, que con el micro del teclado (dictado) es voz igualmente.
+- **Cada petición es de un solo turno**, también la conversación (el diálogo va escrito dentro
+  del mensaje). En Opus 5.5 los bloques de razonamiento quedan atados a la conversación exacta;
+  un historial que se recorta da 400. Con un turno no hay historial que romper.
+- **El prompt de sistema no cambia ni un byte** (test): idioma, fecha y perfil van en el mensaje
+  del usuario. Los cinco pasan de 512 tokens, el mínimo que se cachea.
+- **Tres guardas antes de gastar** (`pedirIA` en server.js): hay clave, hay `APP_TOKEN` (sin él
+  cualquiera gastaría el crédito) y no se ha pasado el tope del mes (`config.ia_tope_mes`, 15 $;
+  más un freno en memoria de 40 llamadas/10 min). Cada llamada deja fila en `ia_uso` con su coste.
+- **La clave**: `ANTHROPIC_API_KEY` en el entorno manda; si no, la de Ajustes en
+  `config.ia_clave`, que **está vetada en `/config/:key`** (`CONFIG_RESERVADA`) y sólo se escribe
+  por `PUT /ia/clave`, que la comprueba con `models.retrieve` (no gasta). El SDK 1.x la manda
+  como `Authorization: Bearer`, no como `x-api-key`.
+- **Perfil adaptativo** (`lib/ia-perfil.js`, tabla `ia_errores`): cada respuesta trae `errores`
+  con una `clave` corta; se cuentan por (lang, tipo, clave) y los más repetidos vuelven en el
+  siguiente prompt para que Claude reutilice la clave. **A la segunda vez, el error se convierte
+  en tarjeta del SRS** (categoría `errores`, que `lib/fases.js` no cuenta), como mucho 10 al día;
+  los de pronunciación no (se practican en SONIDOS).
+- **HABLAR sólo se marca con micrófono** (`via: 'voz'`): el dictado no se distingue de teclear.
+- Rutas: `/ia/estado`, `/ia/clave` (PUT/DELETE), `/ia/ajustes`, `/ia/pronunciacion`,
+  `/ia/conversacion`, `/ia/escritura` (corrige, no guarda: el cliente rellena la rúbrica y
+  `POST /writing/submissions` acepta `ia_feedback`), `/ia/oral` (guarda en
+  `speaking_submissions`; sólo C1 crea `exam_attempts`), `/ia/perfil`, `/ia/consejo`,
+  `/ia/prueba` (una llamada real de céntimos; sale en los registros de Render).
+- **Sin gastar**: `?mock=1` devuelve respuestas con la forma real (`lib/ia-mock.js`), y
+  `tools/claude-falso.js` imita la API para probar el servidor entero
+  (`ANTHROPIC_BASE_URL=http://127.0.0.1:4999`).
+
+### Las pantallas (24-oct-2026)
+
+**`src/js/ia.js` es lo común y todas las pantallas pasan por él**: `iaPost` (tiempo máximo y
+errores con `codigo`: `apiFetch` ahora pega `status` y `codigo` al Error), los pintores de una
+corrección (todos escapan), el micro (`iaEscucharFrase`, `iaGrabarLargo`) y Ajustes › IA.
+
+- **En el iPhone con la app instalada se habla por el dictado del teclado, y es el caso normal,
+  no el raro**: es como Edwin usa la app. Toda entrada de voz tiene su campo de texto, con una
+  pista que dice lo que más falla: **el dictado escucha en el idioma del TECLADO**, así que para
+  dictar en francés el teclado tiene que estar en francés (`iaHtmlPistaDictado`).
+- **`via: 'voz'` sólo si lo enviado es exactamente lo que dio el reconocedor** (`iaViaDe`). El
+  dictado no se distingue de teclear, así que no marca HABLAR. De paso se quitaron dos sitios
+  que marcaban HABLAR sin micro: `finishSituation` (work.js) y `saveSpeak` (speak.js).
+- **Ningún texto de la IA va dentro de un `onclick`.** El francés está lleno de apóstrofos
+  ("s'il vous plaît") y rompían la cadena. El texto va en `data-*` (`iaHtmlBotonDecir`) o en un
+  global con prefijo y el onclick sólo lleva un índice.
+- **Nada que cueste se pide solo.** Siempre detrás de un botón que se desactiva mientras espera;
+  la única excepción es la conversación, donde cada frase del alumno es una llamada.
+- **El móvil espera más que el servidor, y un reintento no paga dos veces.** Corregir un ensayo
+  tarda más de un minuto; en el iPhone la pantalla se bloquea, la petición se corta y el servidor
+  termina igual (cobra y, en el oral, GUARDA). Dos piezas: `TIEMPOS_IA` en server.js (40 s o
+  100 s por intento, un reintento) por debajo de `IA_TIEMPO_CORTO`/`IA_TIEMPO_MAX` de ia.js (90 s y
+  220 s); y `unaVezIA` (`crearUnaVez` en lib/ia.js): una petición idéntica en 10 minutos recibe la
+  respuesta guardada con `repetida: true` y `coste: 0`, sin llamar a Claude ni guardar ni contar
+  los errores otra vez (que a la segunda se convertirían en tarjeta). El oral además mira la base
+  (15 min), porque Render dormido pierde la memoria. Las aperturas de conversación no se recuerdan:
+  OTRA VEZ tiene que poder empezar distinto.
+- **Pantallas**:
+  - **CONVERSAR** (`charla.js`, sección `charla`, cuelga de HABLAR en la barra): escenas de la
+    Suiza romanda (panadería, CFF, régie, permis B…) y de la tienda en inglés, las situaciones del
+    sector sin guion, o una a medida. La IA abre la escena; la corrección va bajo cada frase del
+    alumno; las sugerencias no se envían solas (hay que decirlas). Se entra desde HABLAR y desde
+    cada situación de TRABAJO. **`charlaAbrir()` sin escena VUELVE a la conversación a medias** si
+    es del idioma activo (antes la borraba, con los turnos ya pagados); el selector está en «← OTRA
+    ESCENA». **Sin micro (iPhone), una sugerencia no se mete en el campo**: el dictado de iOS AÑADE
+    a lo que hay, y se mandaba la frase dos veces. Se enseña encima, como chuleta.
+  - **"¿POR QUÉ? · IA"** tras cada intento con micro o dictado en TRABAJO, HABLAR y SONIDOS: los
+    reconocedores piden 5 alternativas, que son lo que diagnostica Claude.
+  - **En DECIRLO (inglés y francés) sólo puntúa el primer intento** de cada palabra; repetir se
+    juzga, pero no infla la ronda (con el dictado bastaba teclear la buena cinco veces).
+  - **SONIDOS en francés tiene modo DECIRLO** (sons.js): el veredicto local es el mismo que el del
+    inglés (¿la primera alternativa es la palabra o la otra del par?), sin quitar acentos y con una
+    tabla de homófonos (`iaSonsHomofonos`: "vin" bien dicho puede salir "vingt" o "20"). **La
+    tabla la escribió una IA: conviene que la mire alguien nativo.**
+  - **ESCRIBIR**: CORREGIR CON IA rellena la rúbrica (se puede cambiar) y `ia_feedback` sólo viaja
+    al guardar si el texto es el mismo que se corrigió; si el texto cambió y las notas siguen siendo
+    las de la IA, GUARDAR pregunta (en C1 sería una nota de examen de otro texto). **Guarda borrador
+    en localStorage** (`ia_borrador_<slug>`): iOS mata la PWA en segundo plano y se perdía el texto.
+  - **El oral**: grabar (micro) o dictar, y `/ia/oral` guarda la corrección. Tras guardar, el
+    botón se apaga y hay OTRO INTENTO, para no pagar dos veces lo mismo. El VOLVER ya para el
+    cronómetro (antes seguía y registraba la sesión igual).
+  - **PROGRESO**: "Lo que más fallas" (`/ia/perfil`, gratis, se refresca en cada entrada) y el
+    consejo de la semana (`/ia/consejo`, sólo con botón; se guarda en localStorage por idioma).
+- `test/ia-pantallas.test.js` comprueba que los scripts cargan juntos sin nombres repetidos, que
+  sw.js precachea todo lo de index.html y nunca cachea `/ia`, el escapado de los pintores, `via`,
+  que la clave no vuelve a salir y que HOY tiene un solo primario.
 
 ## Que la app se abra
 

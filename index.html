@@ -20,6 +20,8 @@
 <link rel="stylesheet" href="src/css/pron.css">
 <link rel="stylesheet" href="src/css/sesion.css">
 <link rel="stylesheet" href="src/css/tetris.css">
+<link rel="stylesheet" href="src/css/ia.css">
+<link rel="stylesheet" href="src/css/charla.css">
 <link rel="stylesheet" href="src/css/animations.css">
 </head>
 <body>
@@ -242,6 +244,17 @@
       </div>
     </div>
 
+    <!-- ── CONVERSAR ─────────────────────────────────────────
+         Conversación con IA (charla.js). No tiene pestaña: se entra desde
+         TRABAJO (una situación) y desde HABLAR, y mientras se está dentro la
+         barra marca HABLAR. -->
+    <div class="sec" id="sec-charla">
+      <div class="sec-title">CONVERSAR</div>
+      <div id="charla-content">
+        <div class="empty-state">Cargando...</div>
+      </div>
+    </div>
+
     <!-- ── PRONUNCIACIÓN ──────────────────────────────────── -->
     <div class="sec" id="sec-pron">
       <div class="sec-title">PRONUNCIACIÓN</div>
@@ -340,5 +353,8 @@
 <script src="src/js/settings.js"></script>
 <script src="src/js/sons.js"></script>
 <script src="src/js/tetris.js"></script>
+<!-- La IA va al final: usa escaparHtml (pron.js) y lo de las demás pantallas. -->
+<script src="src/js/ia.js"></script>
+<script src="src/js/charla.js"></script>
 </body>
 </html>
