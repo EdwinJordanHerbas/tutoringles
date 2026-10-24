@@ -523,7 +523,7 @@ function iaHtmlAjustes(e) {
       <div class="progress-bar"><div class="progress-fill" style="width:${pctMes.toFixed(1)}%"></div></div>
       <div class="ia-gasto-fila ia-gasto-pie">
         <span>${Number(e.llamadas_mes) || 0} llamadas este mes</span>
-        <span>Crédito: quedan ${iaDolares(e.credito_restante)} de ${iaDolares(e.credito)}</span>
+        <span>Crédito del mes: quedan ${iaDolares(e.credito_restante)} de ${iaDolares(e.credito)}</span>
       </div>
     </div>
 
@@ -558,11 +558,11 @@ function iaHtmlAjustes(e) {
         <input class="field-input" id="ia-tope" type="number" min="0" max="1000" step="1" inputmode="decimal" value="${Number(e.tope_mes) || 0}">
       </div>
       <div class="field">
-        <label for="ia-credito">Crédito total ($)</label>
+        <label for="ia-credito">Crédito al mes ($)</label>
         <input class="field-input" id="ia-credito" type="number" min="0" max="1000" step="1" inputmode="decimal" value="${Number(e.credito) || 0}">
       </div>
     </div>
-    <div class="field-pista" style="margin-top:-4px">Al llegar al tope la IA se para hasta el mes siguiente. El crédito es sólo para llevar la cuenta.</div>
+    <div class="field-pista" style="margin-top:-4px">Al llegar al tope la IA se para hasta el mes siguiente. El crédito es el que da tu plan Max cada mes (100 $): lo que no gastas caduca, así que no hay que ahorrarlo; el tope sólo evita tocar el saldo comprado.</div>
     <div class="ia-acciones">
       <button class="btn btn-subtle btn-sm" onclick="iaGuardarLimites(this)">GUARDAR TOPE</button>
     </div>

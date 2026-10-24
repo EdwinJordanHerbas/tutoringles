@@ -163,7 +163,7 @@ verdad: todo se probó contra `tools/claude-falso.js`.
 - **El prompt de sistema no cambia ni un byte** (test): idioma, fecha y perfil van en el mensaje
   del usuario. Los cinco pasan de 512 tokens, el mínimo que se cachea.
 - **Tres guardas antes de gastar** (`pedirIA` en server.js): hay clave, hay `APP_TOKEN` (sin él
-  cualquiera gastaría el crédito) y no se ha pasado el tope del mes (`config.ia_tope_mes`, 15 $;
+  cualquiera gastaría el crédito) y no se ha pasado el tope del mes (`config.ia_tope_mes`, 90 $: el crédito del plan Max son 100 $ **al mes** y lo que no se gasta caduca, así que el tope sólo evita llegar al saldo comprado;
   más un freno en memoria de 40 llamadas/10 min). Cada llamada deja fila en `ia_uso` con su coste.
 - **La clave**: `ANTHROPIC_API_KEY` en el entorno manda; si no, la de Ajustes en
   `config.ia_clave`, que **está vetada en `/config/:key`** (`CONFIG_RESERVADA`) y sólo se escribe
@@ -635,7 +635,8 @@ audio fiable → `_21` situaciones por tandas → `_22`/`_23` test de nivel → 
 Tetris → `_25` vocabulario de francés (217, **el orden de las filas es el orden de estudio**) →
 `_26` situaciones de la Suiza romanda → `_27` gramática de francés → `_28` más inglés C1 (116) →
 `_29` idioma y nivel en escribir, el oral y las notas → `_30` tareas de escribir y del oral en francés →
-`_31` comprensión por idioma y Cambridge sin fecha → `_32` comprensión oral y escrita en francés.
+`_31` comprensión por idioma y Cambridge sin fecha → `_32` comprensión oral y escrita en francés → `_33` francés de restauración y estación →
+`_34` IA → `_35` el crédito de la IA es mensual (tope a 90 $).
 
 **Una migración nueva se llama `migration_NN_algo.sql`** (NN = siguiente número) y trae su
 propio `BEGIN`/`COMMIT`. `migrar.js` las ordena por ese número; si una falla, hace rollback,

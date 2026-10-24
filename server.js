@@ -1593,7 +1593,7 @@ async function ajustesIA() {
   const credito = Number(c.ia_credito);
   return {
     modelo: ia.esModelo(c.ia_modelo) ? c.ia_modelo : ia.MODELO_POR_DEFECTO,
-    tope_mes: Number.isFinite(tope) && tope >= 0 ? tope : 15,
+    tope_mes: Number.isFinite(tope) && tope >= 0 ? tope : 90,
     credito: Number.isFinite(credito) && credito >= 0 ? credito : 100,
   };
 }
@@ -1761,7 +1761,9 @@ app.get('/ia/estado', async (req, res) => {
       modelos: Object.entries(ia.MODELOS).map(([id, m]) => ({ id, nombre: m.nombre, entrada: m.entrada, salida: m.salida })),
       tope_mes: aj.tope_mes,
       gasto_mes: g.mes, gasto_total: g.total, llamadas_mes: g.llamadas_mes,
-      credito: aj.credito, credito_restante: Math.max(0, aj.credito - g.total),
+      // El crédito es MENSUAL: el plan Max da 100 $ en cada ciclo y lo que no se
+      // gasta caduca (comprobado en la consola el 24-oct-2026). Se resta lo del mes.
+      credito: aj.credito, credito_restante: Math.max(0, aj.credito - g.mes),
     });
   } catch (e) { fallo(res, e); }
 });
