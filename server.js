@@ -1783,8 +1783,12 @@ app.put('/ia/clave', async (req, res) => {
         .models.retrieve(aj.modelo);
     } catch (e) {
       const st = e?.status;
+      // El motivo que da la API (nunca lleva la clave) se enseña y queda en el
+      // registro: con sólo "(400)" no había forma de saber qué pasaba.
+      const motivo = String(e?.error?.error?.message || e?.message || '').slice(0, 200);
+      console.error(`[ia] clave: la API respondió ${st || 'sin conexión'} · ${motivo}`);
       if (st === 401 || st === 403) return res.status(400).json({ error: 'La API dice que esa clave no es válida.' });
-      return res.status(502).json({ error: `No se pudo comprobar la clave (${st || 'sin conexión'}).` });
+      return res.status(502).json({ error: `No se pudo comprobar la clave (${st || 'sin conexión'}${motivo ? `: ${motivo}` : ''}).` });
     }
     await db(`INSERT INTO config (key, value) VALUES ('ia_clave', $1)
               ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [clave]);
