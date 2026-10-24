@@ -30,6 +30,51 @@
 // 200 caracteres: no pasarse, o la IA recibe el papel a medias).
 const CHARLA_ESCENARIOS = {
   fr: [
+    // En el trabajo: aquí el alumno es el empleado y la IA el cliente. Van
+    // primero: es para lo que va a Suiza (temporada en una estación, venta y
+    // atención al público), y vender ya sabe; lo que le falta es el francés.
+    {
+      grupo: 'trabajo',
+      titulo: 'Una clienta indecisa', lugar: 'MAGASIN DE SPORT · CONSEIL', quien: 'La cliente',
+      escenario: 'Tienda de deporte en una estación de esquí de la Suiza romanda. El alumno es el vendedor: una clienta busca algo pero no sabe bien qué; tiene que averiguarlo con preguntas y aconsejarla.',
+      papel: 'Clienta francófona de unos 35 años, educada e indecisa: duda entre dos chaquetas de esquí, pregunta diferencias, tallas y precio en francos; compra sólo si la aconsejan bien.',
+    },
+    {
+      grupo: 'trabajo',
+      titulo: 'Alquiler de esquís', lugar: 'LOCATION DE SKIS · LEYSIN', quien: 'Le client',
+      escenario: 'Mostrador de alquiler de esquís en Leysin, un sábado por la mañana. El alumno es el empleado: pregunta nivel, pie, peso y días, y explica precio, casco, seguro y devolución.',
+      papel: 'Turista francés con su hijo de 10 años y prisa por subir: da los datos a medias, pregunta si el casco va incluido, si hay seguro contra robo y hasta qué hora se devuelve.',
+    },
+    {
+      grupo: 'trabajo',
+      titulo: '«En internet es más barato»', lugar: 'VENTE · OBJECTION PRIX', quien: 'Le client',
+      escenario: 'Tienda de deporte. Un cliente quiere unas zapatillas de trail pero las ve caras. El alumno es el vendedor: argumentar el valor, proponer alternativas y cerrar la venta sin presionar.',
+      papel: 'Cliente suizo amable y ahorrador: dice que en internet están más baratas y que lo va a pensar; se convence con buenos argumentos (probárselas, garantía, consejo) o una alternativa.',
+    },
+    {
+      grupo: 'trabajo',
+      titulo: 'Una clienta enfadada', lugar: 'RÉCLAMATION', quien: 'La cliente',
+      escenario: 'Mostrador de una tienda de la estación. Una clienta vuelve enfadada: lo que compró ha fallado al segundo día. El alumno es el empleado: escuchar, disculparse y ofrecer una solución.',
+      papel: 'Clienta molesta pero razonable, habla rápido: se calma si la escuchan y le ofrecen cambio, reembolso o un bon; si no, pide hablar con el responsable.',
+    },
+    {
+      grupo: 'trabajo',
+      titulo: 'En sala: tomar nota y cobrar', lugar: 'RESTAURANT · SERVICE', quien: 'Les clients',
+      escenario: 'Restaurante de una estación de esquí suiza, a mediodía. El alumno es el camarero: recibe a la mesa, toma nota de bebida y comida, responde sobre alérgenos y cobra.',
+      papel: 'Pareja de turistas francófonos: preguntan por el plato del día, si la fondue lleva gluten, piden vino por decis y al final pagan por separado, uno con Twint.',
+    },
+    {
+      grupo: 'trabajo',
+      titulo: 'Recepción: un turista pregunta', lugar: 'ACCUEIL · STATION', quien: 'Le touriste',
+      escenario: 'Recepción de un hotel en una estación de esquí suiza. El alumno es el recepcionista: informa sobre remontes, forfait, el tiempo, dónde comer y cómo llegar a la estación de tren.',
+      papel: 'Turista belga simpático y preguntón: horarios de las remontées, precio del forfait de un día, si nevará mañana, un sitio para una fondue y el camino a la gare.',
+    },
+    {
+      grupo: 'trabajo',
+      titulo: 'Coger el teléfono del negocio', lugar: 'AU TÉLÉPHONE · RÉSERVATION', quien: 'La cliente',
+      escenario: 'El alumno coge el teléfono del sitio donde trabaja en la Suiza romanda. Una clienta llama para reservar o preguntar si tienen algo; hay que entender, apuntar nombre y número y confirmar.',
+      papel: 'Clienta que habla deprisa: quiere reservar para el sábado o saber si tienen algo en stock, deletrea su apellido, da su número de natel con septante y nonante y pide confirmación.',
+    },
     {
       titulo: 'La panadería', lugar: 'BOULANGERIE · LAUSANNE', quien: 'La boulangère',
       escenario: 'Una boulangerie de barrio en Lausana, a primera hora. El alumno, recién llegado a Suiza, quiere comprar pan y algo para desayunar, y pagar.',
@@ -219,6 +264,16 @@ const charlaPlural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
 
 // ── SELECTOR ─────────────────────────────────────────────
 
+/** Los grupos de escenas del selector, en orden. El índice de cada escena sigue siendo el de CHARLA_ESCENARIOS. */
+function charlaGrupos(lang) {
+  return lang === 'fr'
+    ? [
+      { id: 'trabajo', tit: 'En el trabajo: atiendes tú', sub: 'Tú eres el empleado; Claude, el cliente. Vender ya sabes: aquí se entrena hacerlo en francés.' },
+      { id: 'llegar', tit: 'Tus primeros días en Suiza', sub: 'Lo que te vas a encontrar la primera semana en la Suiza romanda.' },
+    ]
+    : [{ id: 'llegar', tit: 'En la tienda', sub: 'Tú eres el dependiente; Claude, el cliente.' }];
+}
+
 function charlaPintarSelector() {
   const c = document.getElementById('charla-content');
   if (!c) return;
@@ -238,13 +293,13 @@ function charlaPintarSelector() {
       <div id="charla-aviso"></div>
     </div>
 
-    <div class="charla-grupo-tit">${lang === 'fr' ? 'Tus primeros días en Suiza' : 'En la tienda'}</div>
-    <div class="charla-grupo-sub">${lang === 'fr'
-      ? 'Lo que te vas a encontrar la primera semana en la Suiza romanda.'
-      : 'Tú eres el dependiente; Claude, el cliente.'}</div>
-    <div class="charla-lista">
-      ${escenas.map((e, i) => charlaHtmlOpcion({ titulo: e.titulo, meta: e.lugar }, `charlaElegirEscenario(${i})`)).join('')}
-    </div>
+    ${charlaGrupos(lang).map((g) => `
+      <div class="charla-grupo-tit">${g.tit}</div>
+      <div class="charla-grupo-sub">${g.sub}</div>
+      <div class="charla-lista">
+        ${escenas.map((e, i) => ((e.grupo || 'llegar') === g.id
+          ? charlaHtmlOpcion({ titulo: e.titulo, meta: e.lugar }, `charlaElegirEscenario(${i})`) : '')).join('')}
+      </div>`).join('')}
 
     <div class="charla-grupo-tit">Situaciones de tu sector</div>
     <div class="charla-grupo-sub">Las mismas de TRABAJO, pero sin guion: la otra persona improvisa.</div>

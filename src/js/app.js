@@ -806,7 +806,7 @@ async function initApp() {
 
 // Se sube a mano en cada despliegue que cambie el frontend. Se ve en Ajustes,
 // para poder comprobar qué está corriendo el móvil sin adivinarlo.
-const APP_VERSION = 'v22 · 24-oct-2026';
+const APP_VERSION = 'v23 · 24-oct-2026';
 
 function pintarVersion() {
   const el = document.getElementById('version-app');

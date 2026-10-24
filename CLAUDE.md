@@ -49,7 +49,8 @@ del servidor y tiene que saber de qué idioma hablar.
   server.js (`?lang=` para forzar uno). Una consulta nueva sobre `words` sin `w.lang = …` mezcla
   los dos idiomas: en la sesión saldrían palabras inglesas con la voz francesa.
 - **El sector va por idioma**: `sectorDe(lang)` da el del perfil si es de ese idioma y, si no, el
-  primero que haya. El francés tiene el suyo, `suisse-romande` (12 situaciones). Las columnas
+  primero que haya. El francés tiene el suyo, `suisse-romande` (18 situaciones: las 12 de llegar e instalarse y,
+  desde el 24-oct, 6 de atención al público y venta, la 36). Las columnas
   `situations.title_en` y `situation_lines.en` se llaman así por herencia: guardan el texto **en
   el idioma del sector**.
 - **La figurada es sólo del inglés** (`figurarSi(lang, …)`). Con una palabra francesa buscaría el
@@ -636,7 +637,9 @@ Tetris → `_25` vocabulario de francés (217, **el orden de las filas es el ord
 `_26` situaciones de la Suiza romanda → `_27` gramática de francés → `_28` más inglés C1 (116) →
 `_29` idioma y nivel en escribir, el oral y las notas → `_30` tareas de escribir y del oral en francés →
 `_31` comprensión por idioma y Cambridge sin fecha → `_32` comprensión oral y escrita en francés → `_33` francés de restauración y estación →
-`_34` IA → `_35` el crédito de la IA es mensual (tope a 90 $).
+`_34` IA → `_35` el crédito de la IA es mensual (tope a 90 $) → `_36` atención al público y venta en
+francés (6 situaciones y 54 fórmulas, las primeras de la cola). **Si se reaplica la 26, reaplicar
+después la 36**: la 26 regenera las líneas de todo el sector.
 
 **Una migración nueva se llama `migration_NN_algo.sql`** (NN = siguiente número) y trae su
 propio `BEGIN`/`COMMIT`. `migrar.js` las ordena por ese número; si una falla, hace rollback,
