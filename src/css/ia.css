@@ -1,0 +1,248 @@
+/* TutorIngles — ia.css
+   Lo que pinta la IA (src/js/ia.js y las pantallas que lo usan). Todo con el
+   prefijo ia- para no pisar nada. La conversación tiene su propio fichero
+   (charla.css). Los colores de texto verde/rojo/ámbar son los que ya usa la app
+   en sesion.css: los de --success/--danger no dan contraste en texto pequeño. */
+
+/* ── Botones dentro de una fila ─────────────────────────── */
+.ia-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.ia-acciones .btn { width: auto; }
+.btn.ia-ocupado { opacity: 0.6; cursor: wait; }
+
+/* ── Esperando a Claude ─────────────────────────────────── */
+.ia-cargando {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 2px;
+  font-size: 0.76rem;
+  color: var(--text-3);
+}
+.ia-cargando .spinner { width: 18px; height: 18px; margin: 0; flex: none; }
+
+/* ── Error ──────────────────────────────────────────────── */
+.ia-error {
+  font-size: 0.76rem;
+  line-height: 1.55;
+  color: #8a3028;
+  background: rgba(255, 69, 58, 0.10);
+  border: 1px solid rgba(255, 69, 58, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-top: 10px;
+}
+
+/* ── La caja de una respuesta ───────────────────────────── */
+.ia-caja {
+  background: var(--surface-2);
+  border: 1px solid rgba(0, 122, 255, 0.22);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-top: 12px;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: var(--text);
+  text-align: left;
+}
+.ia-cabeza {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+  font-size: 0.74rem;
+  color: var(--text-2);
+}
+.ia-marca {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+.ia-punt {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: #8a5a00;
+}
+.ia-punt.ia-ok { color: #1f6f3d; }
+.ia-resumen { margin: 4px 0 8px; }
+.ia-bloque-tit {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin: 12px 0 6px;
+}
+.ia-pie, .ia-coste {
+  font-size: 0.64rem;
+  color: var(--text-3);
+  margin-top: 8px;
+}
+.ia-coste { font-family: var(--font-mono); text-align: right; margin-top: 4px; }
+
+/* ── Pronunciación: palabra por palabra ─────────────────── */
+.ia-palabra {
+  border-top: 1px solid rgba(156, 190, 214, 0.35);
+  padding: 8px 0;
+}
+.ia-palabra-tit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ia-fig {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--accent);
+}
+.ia-decir { width: 30px; height: 30px; flex: none; }
+.ia-ejercicio, .ia-siguiente {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-dim);
+  border: 1px solid rgba(0, 122, 255, 0.25);
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+/* ── Correcciones: lo dicho tachado → lo bueno ──────────── */
+.ia-correcciones { display: flex; flex-direction: column; gap: 8px; }
+.ia-correccion {
+  background: var(--surface-inset);
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  position: relative;
+}
+.ia-par { font-size: 0.82rem; line-height: 1.5; }
+.ia-mal { color: #8a3028; text-decoration: line-through; text-decoration-color: rgba(138, 48, 40, 0.5); }
+.ia-bien { color: #1f6f3d; font-weight: 600; }
+.ia-flecha { color: var(--text-3); margin: 0 2px; }
+.ia-expl { font-size: 0.74rem; color: var(--text-2); margin-top: 3px; line-height: 1.5; }
+.ia-tipo {
+  position: absolute;
+  top: 8px;
+  right: 9px;
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+/* En las correcciones flota: el texto la rodea en vez de pasar por debajo. */
+.ia-tipo.ia-tipo-flota { position: static; float: right; margin: 2px 0 4px 8px; }
+
+/* ── Listas (puntos fuertes, frases útiles) ─────────────── */
+.ia-lista { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.ia-lista li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.8rem;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+}
+
+/* ── Las cuatro notas de una rúbrica (escrito y oral) ───── */
+.ia-notas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 8px 0;
+}
+.ia-nota {
+  background: var(--surface-inset);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+.ia-nota-nombre { font-size: 0.66rem; color: var(--text-3); }
+.ia-nota-valor { font-family: var(--font-mono); font-weight: 700; font-size: 1rem; color: var(--text); }
+.ia-total {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--accent);
+}
+
+/* ── Versión mejorada y otros textos largos ─────────────── */
+.ia-plegable {
+  margin-top: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+  padding: 8px 12px;
+}
+.ia-plegable summary {
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.ia-plegable > div { margin-top: 8px; font-size: 0.8rem; line-height: 1.6; }
+.ia-plegable p { margin: 0 0 8px; }
+
+/* ── Errores repetidos que entran al repaso ─────────────── */
+.ia-tarjetas {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 10px;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: #1f6f3d;
+  background: rgba(48, 209, 88, 0.12);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+.ia-tarjetas .ico { flex: none; margin-top: 1px; }
+
+/* ── Dictado con el teclado (sin reconocedor) ───────────── */
+.ia-dictado { margin-top: 10px; text-align: left; }
+.ia-dictado-fila { display: flex; gap: 8px; align-items: stretch; }
+.ia-dictado-fila .field-input { flex: 1; min-width: 0; }
+.ia-dictado-fila .btn { width: auto; flex: none; }
+.ia-dictado-oido { font-size: 0.72rem; color: var(--text-3); margin-top: 8px; }
+.ia-pista-mas summary { cursor: pointer; color: var(--accent); margin-top: 2px; }
+.ia-pista-mas { margin-top: 2px; }
+
+/* ── Ajustes › IA ───────────────────────────────────────── */
+.ia-estado { font-size: 0.8rem; line-height: 1.55; color: var(--text-2); margin-bottom: 12px; }
+.ia-luz {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--text-4);
+  margin-right: 4px;
+  vertical-align: 0;
+}
+.ia-luz-ok { background: var(--success); }
+.ia-luz-mal { background: var(--warning); }
+.ia-gasto { margin-bottom: 14px; }
+.ia-gasto .progress-bar { margin: 6px 0; }
+.ia-gasto-fila {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.76rem;
+  color: var(--text-2);
+}
+.ia-gasto-pie { font-size: 0.66rem; color: var(--text-3); flex-wrap: wrap; }
+.ia-dos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ia-prueba { margin-top: 16px; border-top: 1px solid rgba(156, 190, 214, 0.35); padding-top: 14px; }

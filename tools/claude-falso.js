@@ -47,13 +47,16 @@ const RESPUESTAS = [
   })],
 ];
 
-function crear({ fallarCon = null } = {}) {
+// `retrasoMs`: tarda eso en contestar a /v1/messages, para probar los tiempos
+// máximos y los reintentos sin esperar a que la API de verdad vaya lenta.
+function crear({ fallarCon = null, retrasoMs = 0 } = {}) {
   const peticiones = [];
   const srv = http.createServer((req, res) => {
     let cuerpo = '';
     req.on('data', (d) => { cuerpo += d; });
     req.on('end', () => {
-      const json = (st, o) => { res.writeHead(st, { 'content-type': 'application/json' }); res.end(JSON.stringify(o)); };
+      const responder = (st, o) => { if (!res.destroyed) { res.writeHead(st, { 'content-type': 'application/json' }); res.end(JSON.stringify(o)); } };
+      const json = (st, o) => (retrasoMs && req.url.startsWith('/v1/messages') ? setTimeout(() => responder(st, o), retrasoMs) : responder(st, o));
       if (req.method === 'GET' && req.url.startsWith('/v1/models/')) {
         // El SDK manda la clave como `Authorization: Bearer` (versiones 1.x) o
         // como `x-api-key` (las anteriores): se miran las dos.

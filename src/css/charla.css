@@ -1,0 +1,390 @@
+/* TutorIngles — charla.css
+   CONVERSAR (src/js/charla.js): el selector de escenas y la conversación con
+   la IA. Todo con el prefijo charla-. Las burbujas siguen la idea de los
+   mensajes del móvil (la otra persona a la izquierda, tú a la derecha) porque
+   es lo que se lee sin pensar; las correcciones reutilizan piezas de ia.css
+   (.ia-par, .ia-mal, .ia-bien, .ia-expl). Los colores de texto verde/rojo/ámbar
+   son los de ia.css: --success/--danger no dan contraste en texto pequeño. */
+
+/* ── Selector ───────────────────────────────────────────── */
+.charla-intro p {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.charla-intro-tit {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.charla-intro .charla-intro-pie {
+  font-size: 0.72rem;
+  color: var(--text-3);
+  margin: 0;
+}
+.charla-intro .ia-error { margin-top: 12px; }
+
+.charla-grupo-tit {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 22px 4px 3px;
+}
+.charla-grupo-sub {
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--text-3);
+  margin: 0 4px 10px;
+}
+.charla-lista { display: flex; flex-direction: column; gap: 8px; }
+
+/* .topic-item es un div en el resto de la app; aquí es un botón (se llega con
+   el teclado y el lector de pantalla lo anuncia), así que se le quita lo del
+   navegador. */
+.charla-opcion {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  -webkit-appearance: none;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.charla-opcion:active { box-shadow: var(--shadow-inset); transform: scale(0.99); }
+.charla-opcion .topic-item-title,
+.charla-opcion .topic-item-meta { display: block; }
+.charla-opcion-sub {
+  display: block;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  font-style: italic;
+  color: var(--text-3);
+}
+.charla-opcion-ico {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-dim);
+}
+.charla-opcion-ir {
+  flex: none;
+  font-size: 1.3rem;
+  line-height: 1;
+  color: var(--text-3);
+}
+.charla-vacio {
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-3);
+  padding: 6px 4px;
+}
+.charla-medida { padding: 16px; }
+.charla-medida .btn { margin-top: 2px; }
+
+/* ── Conversación: cabecera ─────────────────────────────── */
+.charla-cabeza {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.charla-cabeza .btn { width: auto; }
+.charla-voz {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 1.5px;
+  color: var(--text-3);
+  background: var(--surface-raised);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow: var(--shadow-raised);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.charla-voz .ico { opacity: 0.4; }
+.charla-voz.charla-voz-on {
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-color: rgba(0, 122, 255, 0.35);
+}
+.charla-voz.charla-voz-on .ico { opacity: 1; }
+
+.charla-escena { margin: 0 2px 16px; }
+.charla-escena-tit {
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text);
+}
+.charla-escena-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  font-size: 0.74rem;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+
+/* ── Conversación: el hilo ──────────────────────────────── */
+.charla-hilo { display: flex; flex-direction: column; gap: 14px; }
+.charla-turno {
+  display: flex;
+  flex-direction: column;
+  max-width: 88%;
+  min-width: 0;
+}
+.charla-ia { align-self: flex-start; align-items: flex-start; }
+.charla-alumno { align-self: flex-end; align-items: flex-end; }
+
+.charla-burbuja {
+  max-width: 100%;
+  padding: 10px 14px;
+  border-radius: 20px;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.charla-ia .charla-burbuja {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-bottom-left-radius: 6px;
+  box-shadow: 4px 4px 12px rgba(156, 190, 214, 0.45), -3px -3px 8px rgba(255, 255, 255, 0.8);
+  color: var(--text);
+}
+.charla-alumno .charla-burbuja {
+  background: linear-gradient(145deg, #1a8fff, #006fe0);
+  color: #fff;
+  border-bottom-right-radius: 6px;
+  box-shadow: 3px 3px 10px rgba(0, 122, 255, 0.30);
+}
+.charla-quien {
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 3px;
+}
+.charla-herr {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.charla-trad-btn {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 1.5px;
+  color: var(--accent);
+  background: none;
+  border: none;
+  padding: 8px 4px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.charla-trad {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(156, 190, 214, 0.6);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  font-style: italic;
+  color: var(--text-2);
+}
+.charla-trad[hidden] { display: none; }
+.charla-ia .ia-tarjetas { max-width: 100%; }
+
+/* Lo tuyo: con el micro o no, si se quedó sin enviar, y la corrección. */
+.charla-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  font-size: 0.62rem;
+  color: var(--text-3);
+}
+.charla-meta .ico { opacity: 0.6; }
+.charla-sin-enviar { color: #8a3028; font-weight: 600; }
+
+.charla-correccion {
+  max-width: 100%;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 159, 10, 0.10);
+  border: 1px solid rgba(255, 159, 10, 0.30);
+  font-size: 0.82rem;
+  text-align: left;
+}
+.charla-corr-tit {
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #8a5a00;
+  margin-bottom: 2px;
+}
+.charla-corr-fila { display: flex; align-items: center; gap: 8px; }
+.charla-corr-fila .ia-par { flex: 1; min-width: 0; padding-right: 0; overflow-wrap: anywhere; }
+.charla-bien {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 0.66rem;
+  color: #1f6f3d;
+}
+
+/* Sugerencias: al tocarlas van al campo, no se envían. */
+.charla-sugerencias {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 10px;
+}
+.charla-sug-tit { font-size: 0.66rem; line-height: 1.4; color: var(--text-3); }
+.charla-chip {
+  font: inherit;
+  font-size: 0.84rem;
+  line-height: 1.35;
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: 16px;
+  background: var(--accent-dim);
+  color: #0058b8;
+  border: 1px solid rgba(0, 122, 255, 0.30);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.charla-chip:active { transform: scale(0.98); }
+
+/* «escribiendo…» */
+.charla-escribiendo {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 12px 16px;
+}
+.charla-escribiendo i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+  animation: charla-punto 1.2s ease-in-out infinite;
+}
+.charla-escribiendo i:nth-child(2) { animation-delay: 0.15s; }
+.charla-escribiendo i:nth-child(3) { animation-delay: 0.3s; }
+.charla-escribiendo span {
+  margin-left: 4px;
+  font-size: 0.72rem;
+  color: var(--text-3);
+}
+@keyframes charla-punto {
+  0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
+  40%           { opacity: 1;    transform: translateY(-3px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .charla-escribiendo i { animation: none; opacity: 0.6; }
+}
+.charla-fallo .ia-error { margin-top: 0; }
+
+/* ── Conversación: la entrada ───────────────────────────── */
+.charla-entrada {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(156, 190, 214, 0.30);
+}
+.charla-micro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.charla-micro .speak-record-btn:disabled { opacity: 0.45; cursor: default; box-shadow: var(--shadow-raised); }
+.charla-micro-pista {
+  min-height: 1.2em;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--text-3);
+}
+.charla-micro-pista.charla-pista-mal { color: #8a3028; }
+/* Chuleta (sin reconocedor): la sugerencia se lee encima del campo y se dicta.
+   No se mete en el campo porque el dictado de iOS la añadiría detrás. */
+.charla-chuleta {
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: var(--accent-dim);
+  border: 1px dashed rgba(0, 122, 255, 0.35);
+}
+.charla-chuleta[hidden] { display: none; }
+.charla-chuleta-tit {
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #0058b8;
+  margin-bottom: 3px;
+}
+.charla-chuleta-txt {
+  font-size: 0.95rem;
+  line-height: 1.4;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.charla-escribir { display: flex; gap: 8px; align-items: flex-end; }
+/* 16 px: por debajo, Safari de iPhone amplía la página al tocar el campo. */
+.charla-escribir textarea.field-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 46px;
+  max-height: 140px;
+  resize: none;
+  font-size: 16px;
+  line-height: 1.4;
+}
+.charla-escribir .btn { width: auto; flex: none; min-height: 46px; }
+.charla-escribir .field-input:disabled,
+.charla-escribir .btn:disabled { opacity: 0.55; }
+.charla-entrada .field-pista { margin-top: 6px; }
+
+.charla-pie {
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 0.62rem;
+  color: var(--text-3);
+}
+.charla-pie .ia-coste { margin: 0; }
+
+/* ── Cierre de la escena ────────────────────────────────── */
+.charla-cierre { margin-top: 18px; }
+.charla-cierre .card-title { margin-bottom: 6px; }
+.charla-cierre-datos { font-size: 0.78rem; color: var(--text-2); }
+.charla-cierre-ok {
+  margin: 10px 0 0;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: var(--text-2);
+}

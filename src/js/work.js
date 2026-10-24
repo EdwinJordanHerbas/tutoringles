@@ -19,6 +19,13 @@ let _wkRec        = null;
 let _wkRecording  = false;
 let _wkInited     = false;
 
+// Lo que entendió el reconocedor en el último intento de cada frase, con sus
+// alternativas, para el «¿POR QUÉ? · IA». Va aquí y no dentro del onclick: las
+// frases francesas llevan apóstrofos ("l'addition", "s'il vous plaît") y un
+// `onclick="f('…')"` con el texto dentro se rompe. El botón sólo lleva la clave
+// ('k-3' = frase clave 3, 't-5' = turno 5 del role-play).
+let iaWkIntentos = {};
+
 const WkSpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 // ── INIT ─────────────────────────────────────────────────
@@ -46,12 +53,27 @@ function wkVoz() {
        : (typeof idiomaVoz === 'function' ? idiomaVoz() : 'en-GB');
 }
 
+// El idioma de la situación como lo piden las rutas /ia/*: el código corto
+// ('en' | 'fr'), no la etiqueta de voz de wkVoz().
+function iaWkLang() {
+  if (_wkCurrent?.lang === 'fr' || _wkCurrent?.lang === 'en') return _wkCurrent.lang;
+  return typeof _idioma !== 'undefined' && _idioma ? _idioma : 'en';
+}
+
 // ── COMPARAR LO DICHO CON LO ESPERADO ────────────────────
 // Normaliza y compara palabra a palabra. Es una medida de reconocimiento.
+//
+// Sin tildes y con el apóstrofo como separador, a los dos lados. En francés
+// las dos cosas hundían la nota sin motivo: el reconocedor escribe "a" donde la
+// base tiene "à", o "l’addition" con el apóstrofo tipográfico donde la base
+// tiene "l'addition", y la palabra entera contaba como fallada. Partiendo la
+// elisión ("l addition", "s il") las dos formas dan lo mismo. La œ se abre en
+// "oe" porque NFD no la descompone y "cœur" perdía la mitad.
 function wkCompare(expected, said) {
-  const norm = (s) => s.toLowerCase()
-    .replace(/[.,!?;:'"—–-]/g, ' ')
-    .replace(/\s+/g, ' ')
+  const norm = (s) => String(s ?? '').toLowerCase()
+    .replace(/œ/g, 'oe').replace(/æ/g, 'ae')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
     .trim();
   const a = norm(expected).split(' ').filter(Boolean);
   const b = norm(said).split(' ').filter(Boolean);
@@ -105,7 +127,7 @@ async function loadWorkSituations() {
       <div class="glass-card-accent anim-slide-up">
         <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
           TU SECTOR
-          <span class="badge">${ico(profile?.track_icon || 'work', 14)} ${profile?.track_name || '—'}</span>
+          <span class="badge">${ico(profile?.track_icon || 'work', 14)} ${escaparHtml(profile?.track_name || '—')}</span>
         </div>
         <div style="font-size:0.75rem;color:var(--text-2);margin-bottom:12px">
           Situaciones reales de tu trabajo. Escúchalas, dilas en alto y practica la conversación entera.
@@ -118,12 +140,12 @@ async function loadWorkSituations() {
         ${_wkSituations.map(s => `
           <div class="topic-item" onclick="openSituation(${s.id})">
             <div class="topic-item-info">
-              <div class="topic-item-title">${s.title_es}</div>
+              <div class="topic-item-title">${escaparHtml(s.title_es)}</div>
               <div class="topic-item-meta">
-                ${s.title_en} · ${s.key_count} frases${s.practiced_count ? ` · practicada ${s.practiced_count}×` : ''}
+                ${escaparHtml(s.title_en)} · ${Number(s.key_count) || 0} frases${s.practiced_count ? ` · practicada ${Number(s.practiced_count)}×` : ''}
               </div>
             </div>
-            <span class="badge badge-${(s.level || 'a2').toLowerCase()}">${s.level}</span>
+            <span class="badge badge-${escaparAttr((s.level || 'a2').toLowerCase())}">${escaparHtml(s.level)}</span>
             <div class="topic-check">${s.completed ? '✓' : ''}</div>
           </div>
         `).join('')}
@@ -143,6 +165,7 @@ async function openSituation(id) {
     _wkTab     = 'keys';
     _wkTurn    = 0;
     _wkScores  = [];
+    iaWkIntentos = {};
     renderSituation();
   } catch (e) {
     c.innerHTML = cajaError(e);
@@ -159,13 +182,25 @@ function renderSituation() {
 
     <div class="glass-card-accent anim-slide-up">
       <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
-        ${s.title_es}
-        <span class="badge badge-${(s.level || 'a2').toLowerCase()}">${s.level}</span>
+        ${escaparHtml(s.title_es)}
+        <span class="badge badge-${escaparAttr((s.level || 'a2').toLowerCase())}">${escaparHtml(s.level)}</span>
       </div>
       <div style="font-size:0.72rem;color:var(--text-3);font-family:var(--font-mono);margin-bottom:8px">
-        ${s.title_en.toUpperCase()}
+        ${escaparHtml(String(s.title_en || '').toUpperCase())}
       </div>
-      ${s.context_es ? `<div style="font-size:0.78rem;color:var(--text-2)">${s.context_es}</div>` : ''}
+      ${s.context_es ? `<div style="font-size:0.78rem;color:var(--text-2)">${escaparHtml(s.context_es)}</div>` : ''}
+      <!-- Lo que el guion no da: improvisar. La IA hace de la otra persona en
+           esta misma situación, contesta a lo que digas y te corrige. Es un
+           btn-subtle y no un tercer chip porque sale de la pantalla (abre la
+           conversación), y los chips cambian de panel sin moverse de aquí. -->
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--surface-2)">
+        <div style="font-size:0.7rem;color:var(--text-3);line-height:1.45">
+          Improvísala: la IA hace de ${iaWkLang() === 'fr' ? 'la otra persona' : 'cliente'}, te contesta y te corrige.
+        </div>
+        <div class="ia-acciones" style="margin-top:8px">
+          <button class="btn btn-subtle btn-sm" onclick="iaWkConversar()">${ico('speak', 14)} CONVERSAR CON IA</button>
+        </div>
+      </div>
     </div>
 
     <div class="vocab-filters" style="margin:12px 0">
@@ -188,6 +223,18 @@ function setWorkTab(tab) {
 function renderWorkPanel() {
   if (_wkTab === 'keys') renderKeyPhrases();
   else                   renderRoleplay();
+}
+
+// Abre la conversación con IA sobre la situación abierta (charla.js). Antes se
+// para lo que esté sonando o escuchando aquí: el micro de esta pantalla seguiría
+// abierto debajo de la conversación y se quedaría con lo que se diga allí.
+function iaWkConversar() {
+  if (!_wkCurrent) return;
+  if (typeof charlaAbrir !== 'function') { toast('La conversación con IA no está disponible', 'error'); return; }
+  try { _wkRec?.abort(); } catch { /* ya estaba parado */ }
+  _wkRecording = false;
+  if (typeof vozParar === 'function') vozParar();
+  charlaAbrir({ situacion_id: _wkCurrent.id, titulo: _wkCurrent.title_es });
 }
 
 // ── FRASES CLAVE ─────────────────────────────────────────
@@ -220,17 +267,18 @@ function renderKeyPhrases() {
       <div class="glass-card" style="margin-bottom:10px" id="wk-line-${i}">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
           <div style="flex:1">
-            <div style="font-size:0.92rem;font-weight:600;color:var(--text);line-height:1.35">${k.en}</div>
-            <div style="font-size:0.78rem;color:var(--text-2);margin-top:3px">${k.es}</div>
+            <div style="font-size:0.92rem;font-weight:600;color:var(--text);line-height:1.35">${escaparHtml(k.en)}</div>
+            <div style="font-size:0.78rem;color:var(--text-2);margin-top:3px">${escaparHtml(k.es)}</div>
           </div>
           <div style="display:flex;gap:6px;flex-shrink:0">
-            <button class="btn-icon" onclick="wkSpeak(${JSON.stringify(k.en).replace(/"/g, '&quot;')}, this, ${JSON.stringify(k.id ?? null)})" title="Escuchar"><img src="src/img/icons/listen.png" alt="" class="ico"></button>
+            <button class="btn-icon" data-wk-texto="${escaparAttr(k.en)}" onclick="wkSpeak(this.dataset.wkTexto, this, ${JSON.stringify(k.id ?? null)})" title="Escuchar"><img src="src/img/icons/listen.png" alt="" class="ico"></button>
             <button class="btn-icon" onclick="wkPractice(${i}, this)" title="Repetir"><img src="src/img/icons/mic.png" alt="" class="ico"></button>
           </div>
         </div>
         ${wkPron(k)}
-        ${k.note ? `<div style="font-size:0.68rem;color:var(--text-3);margin-top:8px;padding-top:8px;border-top:1px solid var(--surface-2)"><img src="src/img/icons/idea.png" alt="" class="ico"> ${k.note}</div>` : ''}
+        ${k.note ? `<div style="font-size:0.68rem;color:var(--text-3);margin-top:8px;padding-top:8px;border-top:1px solid var(--surface-2)"><img src="src/img/icons/idea.png" alt="" class="ico"> ${escaparHtml(k.note)}</div>` : ''}
         <div id="wk-result-${i}" style="display:none;margin-top:8px"></div>
+        ${iaWkHtmlTeclado(`wk-dict-k-${i}`, k.en)}
       </div>
     `; }).join('')}
 
@@ -282,6 +330,97 @@ async function terminarTanda(hasta, completa) {
   }
 }
 
+// ── LA IA SOBRE UN INTENTO ───────────────────────────────
+// Las dos rutas de micrófono (frase clave y turno del role-play) pintan lo
+// mismo: lo que se oyó, la nota de reconocimiento y el botón que pregunta a la
+// IA por qué el móvil entendió otra cosa. Todo lo que viene del reconocedor se
+// escapa: lo que se dicta acaba en pantalla tal cual.
+
+/** Guarda el intento y devuelve su HTML. `clave`: 'k-<i>' o 't-<turno>'. */
+function iaWkHtmlIntento(clave, objetivo, alternativas, score) {
+  iaWkIntentos[clave] = { objetivo, alternativas, lang: iaWkLang() };
+  const said  = alternativas[0]?.transcript || '';
+  const color = score >= 80 ? 'var(--success)' : score >= 50 ? 'var(--warning)' : 'var(--danger)';
+  return `
+    <div style="font-size:0.7rem;color:var(--text-3)">Te he oído: «${escaparHtml(said)}»</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+      <span style="font-size:0.62rem;color:var(--text-4)">reconocimiento</span>
+      <span style="font-family:var(--font-mono);font-weight:700;color:${color}">${score}%</span>
+    </div>
+    <div class="ia-acciones" style="margin-top:6px">
+      <button class="btn btn-subtle btn-sm" onclick="iaWkPorQue('${clave}', this)">¿POR QUÉ? · IA</button>
+    </div>
+    <div id="wk-ia-${clave}"></div>`;
+}
+
+/**
+ * El diagnóstico del último intento de esa frase (POST /ia/pronunciacion). Si
+ * sale bien el botón se quita, como en SONIDOS: otro toque pagaría la misma
+ * respuesta y sumaría los mismos errores al repaso. Vuelve con el siguiente
+ * intento, que repinta la caja del resultado entera.
+ */
+async function iaWkPorQue(clave, btn) {
+  const i = iaWkIntentos[clave];
+  const caja = document.getElementById(`wk-ia-${clave}`);
+  if (!i?.objetivo || !i.alternativas?.length || !caja) { toast('Dila primero con el micro', 'error'); return; }
+  await iaDiagnosticarPron({
+    objetivo: i.objetivo, alternativas: i.alternativas, lang: i.lang, caja, btn,
+  });
+  if (caja.querySelector('.ia-caja') && btn?.isConnected) btn.remove();
+}
+
+/**
+ * Con micro, el campo de dictado también está (toda entrada de voz acepta
+ * texto): con ruido el reconocedor da "no-speech" una y otra vez y sólo
+ * quedaba el error. Va plegado, para no competir con el micro, y fuera de
+ * wk-result-* / wk-turn-result, que se reescriben en cada intento y se
+ * llevarían lo dictado. Sin micro no se pinta aquí: sale abierto al tocar el
+ * micro (iaWkMostrarDictado) con el mismo id, así que nunca hay dos. Como el
+ * de abajo, no suma a `_wkScores`.
+ */
+function iaWkHtmlTeclado(id, objetivo) {
+  if (!WkSpeechRec) return '';
+  return iaHtmlPlegable('¿Prefieres dictarla con el teclado?', iaHtmlDictadoPron(id, objetivo, iaWkLang()));
+}
+
+/**
+ * Sin micro de la app (iPhone con la app instalada, o el permiso denegado): la
+ * frase se dicta con el micro del teclado y la IA dice qué se entendió. El
+ * dictado no suma a `_wkScores`: no sale del reconocedor de la app, y la media
+ * que se manda al cerrar es justo lo que marca HABLAR en el servidor.
+ */
+function iaWkHtmlDictado(id, objetivo, motivo) {
+  return `<div style="font-size:0.7rem;color:var(--text-3);line-height:1.45">${motivo}
+      Dila en alto o díctala con el micro del teclado, y la IA te dice qué se entiende.</div>
+    ${iaHtmlDictadoPron(id, objetivo, iaWkLang())}`;
+}
+
+// Errores del micro que no se arreglan pulsando otra vez: ahí se ofrece dictar.
+const IA_WK_SIN_SALIDA = new Set(['not-allowed', 'service-not-allowed', 'audio-capture', 'network']);
+
+function iaWkHtmlErrorMicro(error, idDictado, objetivo) {
+  const msg = typeof iaTextoErrorMicro === 'function' ? iaTextoErrorMicro(error) : `Error del micrófono: ${error}`;
+  if (IA_WK_SIN_SALIDA.has(error)) {
+    // El campo ya está debajo, plegado (iaWkHtmlTeclado): se abre ése en vez de
+    // pintar otro con el mismo id.
+    const plegado = document.getElementById(idDictado)?.closest?.('.ia-plegable');
+    if (!plegado) return iaWkHtmlDictado(idDictado, objetivo, `${escaparHtml(msg)}`);
+    plegado.open = true;
+    return `<div style="font-size:0.7rem;color:var(--danger)">${escaparHtml(msg)}</div>
+      <div style="font-size:0.7rem;color:var(--text-3);line-height:1.45;margin-top:4px">
+        Dila en alto o díctala con el micro del teclado, aquí debajo, y la IA te dice qué se entiende.</div>`;
+  }
+  return `<div style="font-size:0.7rem;color:var(--danger)">${escaparHtml(msg)}</div>`;
+}
+
+/** Pinta el campo de dictado en `out` sin borrar lo que ya se hubiera dictado. */
+function iaWkMostrarDictado(out, id, objetivo, motivo) {
+  out.style.display = 'block';
+  if (!document.getElementById(id)) out.innerHTML = iaWkHtmlDictado(id, objetivo, motivo);
+  // Dentro del toque, el iPhone abre el teclado: queda a un toque del micro.
+  document.getElementById(`${id}-txt`)?.focus();
+}
+
 // Repetir una frase y comprobar si se ha entendido
 function wkPractice(idx, btn) {
   const line = _wkCurrent.keys[idx];
@@ -289,10 +428,8 @@ function wkPractice(idx, btn) {
   if (!line || !out) return;
 
   if (!WkSpeechRec) {
-    out.style.display = 'block';
-    out.innerHTML = `<div style="font-size:0.7rem;color:var(--text-3)">
-      Este navegador no transcribe voz (iOS lo limita en PWA instalada).
-      Escucha con <img src="src/img/icons/listen.png" alt="" class="ico"> y repite en alto.</div>`;
+    iaWkMostrarDictado(out, `wk-dict-k-${idx}`, line.en,
+      'Aquí la app no puede usar el micro (el iPhone no lo deja con la app instalada).');
     return;
   }
 
@@ -301,7 +438,9 @@ function wkPractice(idx, btn) {
   _wkRec = new WkSpeechRec();
   _wkRec.lang = wkVoz();
   _wkRec.interimResults = false;
-  _wkRec.maxAlternatives = 1;
+  // Cinco y no una: la segunda y la tercera dicen qué otra cosa pudo entender
+  // el móvil, que es justo lo que lee la IA para decir qué sonido falla.
+  _wkRec.maxAlternatives = 5;
 
   _wkRec.onstart = () => {
     _wkRecording = true;
@@ -312,8 +451,9 @@ function wkPractice(idx, btn) {
   };
 
   _wkRec.onerror = (e) => {
-    out.innerHTML = `<div style="font-size:0.7rem;color:var(--danger)">
-      ${e.error === 'not-allowed' ? 'Permiso de micrófono denegado' : 'Error: ' + e.error}</div>`;
+    // Con el permiso denegado no llega a haber onstart: la caja sigue oculta.
+    out.style.display = 'block';
+    out.innerHTML = iaWkHtmlErrorMicro(e.error, `wk-dict-k-${idx}`, line.en);
   };
 
   _wkRec.onend = () => {
@@ -323,20 +463,15 @@ function wkPractice(idx, btn) {
   };
 
   _wkRec.onresult = (ev) => {
-    const said  = ev.results[0][0].transcript;
-    const score = wkCompare(line.en, said);
+    const alts = iaAlternativasDe(ev.results[0]);
+    if (!alts.length) return;
+    const score = wkCompare(line.en, alts[0].transcript);
     _wkScores.push(score);
-    const color = score >= 80 ? 'var(--success)' : score >= 50 ? 'var(--warning)' : 'var(--danger)';
-    out.innerHTML = `
-      <div style="font-size:0.7rem;color:var(--text-3)">Te he oído: "${said}"</div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
-        <span style="font-size:0.62rem;color:var(--text-4)">reconocimiento</span>
-        <span style="font-family:var(--font-mono);font-weight:700;color:${color}">${score}%</span>
-      </div>`;
+    out.innerHTML = iaWkHtmlIntento(`k-${idx}`, line.en, alts, score);
   };
 
   try { _wkRec.start(); }
-  catch { out.innerHTML = '<div style="font-size:0.7rem;color:var(--danger)">No se pudo abrir el micrófono</div>'; }
+  catch { out.style.display = 'block'; out.innerHTML = '<div style="font-size:0.7rem;color:var(--danger)">No se pudo abrir el micrófono</div>'; }
 }
 
 // ── ROLE-PLAY ────────────────────────────────────────────
@@ -365,19 +500,20 @@ function renderRoleplay() {
               <div style="font-size:0.58rem;font-family:var(--font-mono);color:var(--text-4);letter-spacing:1px;margin-bottom:3px">
                 ${t.kind === 'you' ? 'TÚ' : (_wkCurrent?.lang === 'fr' ? 'INTERLOCUTOR' : 'CLIENTE')}
               </div>
-              <div style="font-size:0.85rem;color:var(--text);line-height:1.35">${t.en}</div>
+              <div style="font-size:0.85rem;color:var(--text);line-height:1.35">${escaparHtml(t.en)}</div>
               ${i === _wkTurn ? wkPron(t) : ''}
-              <div style="font-size:0.72rem;color:var(--text-3);margin-top:3px">${t.es}</div>
-              ${t.note && i === _wkTurn ? `<div style="font-size:0.65rem;color:var(--text-3);margin-top:6px;padding-top:6px;border-top:1px solid var(--surface-3)"><img src="src/img/icons/idea.png" alt="" class="ico"> ${t.note}</div>` : ''}
+              <div style="font-size:0.72rem;color:var(--text-3);margin-top:3px">${escaparHtml(t.es)}</div>
+              ${t.note && i === _wkTurn ? `<div style="font-size:0.65rem;color:var(--text-3);margin-top:6px;padding-top:6px;border-top:1px solid var(--surface-3)"><img src="src/img/icons/idea.png" alt="" class="ico"> ${escaparHtml(t.note)}</div>` : ''}
             </div>
           </div>
         `).join('')}
       </div>
 
       <div id="wk-turn-result" style="display:none;margin:8px 0"></div>
+      ${current.kind === 'you' ? iaWkHtmlTeclado(`wk-dict-t-${_wkTurn}`, current.en) : ''}
 
       <div style="display:flex;gap:8px;margin-top:12px">
-        <button class="btn btn-ghost" style="flex:1" onclick="wkSpeak(${JSON.stringify(current.en).replace(/"/g, '&quot;')}, this, ${JSON.stringify(current.id ?? null)})">
+        <button class="btn btn-ghost" style="flex:1" data-wk-texto="${escaparAttr(current.en)}" onclick="wkSpeak(this.dataset.wkTexto, this, ${JSON.stringify(current.id ?? null)})">
           <img src="src/img/icons/listen.png" alt="" class="ico"> Escuchar
         </button>
         ${current.kind === 'you' ? `
@@ -412,9 +548,10 @@ function wkPracticeTurn(btn) {
   const out     = document.getElementById('wk-turn-result');
   if (!current || !out) return;
 
+  const turno = _wkTurn;
   if (!WkSpeechRec) {
-    out.style.display = 'block';
-    out.innerHTML = '<div style="font-size:0.7rem;color:var(--text-3)">Este navegador no transcribe voz. Dilo en alto igualmente.</div>';
+    iaWkMostrarDictado(out, `wk-dict-t-${turno}`, current.en,
+      'Aquí la app no puede usar el micro (el iPhone no lo deja con la app instalada).');
     return;
   }
 
@@ -423,6 +560,7 @@ function wkPracticeTurn(btn) {
   _wkRec = new WkSpeechRec();
   _wkRec.lang = wkVoz();
   _wkRec.interimResults = false;
+  _wkRec.maxAlternatives = 5;   // ver wkPractice
 
   _wkRec.onstart = () => {
     _wkRecording = true;
@@ -431,27 +569,33 @@ function wkPracticeTurn(btn) {
     out.innerHTML = '<div style="font-size:0.7rem;color:var(--accent)">Escuchando…</div>';
   };
   _wkRec.onerror = (e) => {
-    out.innerHTML = `<div style="font-size:0.7rem;color:var(--danger)">
-      ${e.error === 'not-allowed' ? 'Permiso de micrófono denegado' : 'Error: ' + e.error}</div>`;
+    out.style.display = 'block';   // ver wkPractice
+    out.innerHTML = iaWkHtmlErrorMicro(e.error, `wk-dict-t-${turno}`, current.en);
   };
-  _wkRec.onend = () => { _wkRecording = false; btn.innerHTML = '<img src="src/img/icons/mic.png" alt="" class="ico"> Decirlo'; };
+  _wkRec.onend = () => {
+    _wkRecording = false;
+    btn.innerHTML = '<img src="src/img/icons/mic.png" alt="" class="ico"> Decirlo';
+  };
   _wkRec.onresult = (ev) => {
-    const said  = ev.results[0][0].transcript;
-    const score = wkCompare(current.en, said);
+    const alts = iaAlternativasDe(ev.results[0]);
+    if (!alts.length) return;
+    const score = wkCompare(current.en, alts[0].transcript);
     _wkScores.push(score);
-    const color = score >= 80 ? 'var(--success)' : score >= 50 ? 'var(--warning)' : 'var(--danger)';
-    out.innerHTML = `
-      <div style="font-size:0.7rem;color:var(--text-3)">Te he oído: "${said}"</div>
-      <div style="display:flex;justify-content:space-between;margin-top:4px">
-        <span style="font-size:0.62rem;color:var(--text-4)">reconocimiento</span>
-        <span style="font-family:var(--font-mono);font-weight:700;color:${color}">${score}%</span>
-      </div>`;
+    out.innerHTML = iaWkHtmlIntento(`t-${turno}`, current.en, alts, score);
   };
 
-  try { _wkRec.start(); } catch { /* nada */ }
+  try { _wkRec.start(); }
+  catch { out.style.display = 'block'; out.innerHTML = '<div style="font-size:0.7rem;color:var(--danger)">No se pudo abrir el micrófono</div>'; }
 }
 
 // ── CERRAR LA SITUACIÓN ──────────────────────────────────
+//
+// No hay PUT /daily-goals {speaking_done:true} aquí, y no se debe volver a
+// poner. Lo había, sin condición, y marcaba HABLAR con sólo pulsar SIGUIENTE
+// hasta el final del guion sin abrir la boca. Quien marca es el servidor: POST
+// /situations/:id/practice escribe speaking_done=TRUE (y la sesión de speaking
+// y la racha) sólo si llega `score`, y `score` sólo existe si el reconocedor
+// del micro devolvió algo (`_wkScores`; el dictado del teclado no suma).
 async function finishSituation() {
   if (!_wkCurrent) return;
   const avg = _wkScores.length
@@ -460,10 +604,12 @@ async function finishSituation() {
 
   try {
     await apiPost(`/situations/${_wkCurrent.id}/practice`, { score: avg, completed: true });
-    await apiPut(`/daily-goals/${hoyLocal()}`, { speaking_done: true });
+    _wkScores = [];
     toast('Situación practicada', 'success');
-    showXpPop(10);
-    updateXpBar(_xpTotal + 10);
+    // Lo mismo que suma el servidor: 10 con micro, 4 sin él.
+    const xp = avg != null ? 10 : 4;
+    showXpPop(xp);
+    updateXpBar(_xpTotal + xp);
     _wkInited = false;
     await loadWorkSituations();
   } catch (e) {

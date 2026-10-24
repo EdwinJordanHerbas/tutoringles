@@ -1,6 +1,8 @@
 // TutorIngles — speak.js
-// Módulo de práctica de Speaking
-// TODO: Implementar grabación de audio, análisis de pronunciación, puntuación
+// HABLAR: la frase del día con el micro (o dictada con el teclado donde no hay
+// micro, que es el iPhone con la app instalada), el «¿POR QUÉ? · IA» que lee
+// lo que entendió el reconocedor, la entrada a CONVERSAR (charla.js) y las
+// tareas del oral (writing.js). HABLAR sólo se marca si se usó el micro.
 
 // ── FRASES DE PRÁCTICA ──────────────────────────────────
 // Banco local de frases (se puede ampliar conectando a la API)
@@ -48,8 +50,21 @@ let _recognition   = null;
 let _lastTranscript = '';
 let _lastScore     = null;
 
+// Lo que entendió el reconocedor en el último intento, con sus alternativas,
+// para el «¿POR QUÉ? · IA». Va en un global y no dentro del onclick: las frases
+// francesas llevan apóstrofos ("s'il vous plaît") y romperían la cadena.
+let iaSpeakAlternativas = [];
+
+// Lo último que se dictó (o tecleó) en el campo de la frase del día, para
+// GUARDAR. No se puede leer del campo al guardar: iaDictadoPron lo vacía tras
+// cada diagnóstico, porque el dictado del iPhone AÑADE a lo que ya hay.
+let iaSpeakDictado = '';
+
 // ¿Soporta el navegador reconocimiento de voz? (Chrome/Edge/Android sí; iOS Safari limitado)
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+/** El idioma de la frase del día como lo piden las rutas /ia/*: 'en' | 'fr'. */
+const iaSpeakLang = () => (frasesDelIdioma() === SPEAKING_PHRASES_FR ? 'fr' : 'en');
 
 // ── INIT ─────────────────────────────────────────────────
 // `forzar` lo usa el botón de VOLVER de una tarea del oral: esa tarea ha pintado
@@ -66,6 +81,12 @@ function renderSpeakSection() {
   const banco     = frasesDelIdioma();
   const frances   = banco === SPEAKING_PHRASES_FR;
   _currentPhrase  = banco[Math.floor(Math.random() * banco.length)];
+  // Frase nueva, intento nuevo: lo de la anterior no puede acabar guardado (o
+  // marcando HABLAR) con ésta.
+  _lastTranscript = '';
+  _lastScore = null;
+  iaSpeakAlternativas = [];
+  iaSpeakDictado = '';
 
   container.innerHTML = `
     <div class="glass-card-accent anim-slide-up">
@@ -73,10 +94,10 @@ function renderSpeakSection() {
         FRASE DEL DÍA
         <span class="badge badge-${_currentPhrase.level.toLowerCase()}">${_currentPhrase.level}</span>
       </div>
-      <div class="speak-phrase" id="speak-phrase">"${_currentPhrase.phrase}"</div>
+      <div class="speak-phrase" id="speak-phrase">"${escaparHtml(_currentPhrase.phrase)}"</div>
       <div id="speak-pron"></div>
       <div style="font-size:0.65rem;color:var(--text-3);margin-bottom:16px;font-family:var(--font-mono)">
-        TOPIC: ${_currentPhrase.topic.toUpperCase()}
+        TOPIC: ${escaparHtml(_currentPhrase.topic.toUpperCase())}
       </div>
       <div style="display:flex;justify-content:center;gap:20px;align-items:center;margin-bottom:14px">
         <button class="btn btn-subtle" onclick="speakPhrase()" title="Escuchar" style="min-width:auto;padding:12px 16px"><img src="src/img/icons/listen.png" alt="" class="ico"> ESCUCHAR</button>
@@ -84,16 +105,37 @@ function renderSpeakSection() {
       </div>
       <div style="text-align:center;margin-bottom:16px">
         <div style="font-family:var(--font-mono);font-size:0.55rem;color:var(--text-3);letter-spacing:2px" id="speak-status">
-          ${SpeechRec ? 'TOCA EL MICRO Y LEE LA FRASE' : 'ESCUCHA Y REPITE EN VOZ ALTA'}
+          ${SpeechRec ? 'TOCA EL MICRO Y LEE LA FRASE' : 'ESCÚCHALA, REPÍTELA Y TOCA EL MICRO'}
         </div>
       </div>
       <div class="speak-transcript" id="speak-transcript" style="display:none"></div>
+      <!-- Con micro, el dictado del teclado también está (toda entrada de voz
+           acepta texto): con ruido el reconocedor da "no-speech" una y otra vez
+           y no quedaba otra salida. Plegado, para no competir con el micro, y
+           FUERA de #speak-transcript, que se reescribe en cada intento y se
+           llevaría lo dictado. Sin micro sale abierto al tocar el micro. -->
+      <div id="speak-teclado">${SpeechRec
+        ? iaHtmlPlegable('¿Prefieres dictarla con el teclado?', iaHtmlDictadoPron('speak-dict', _currentPhrase.phrase, iaSpeakLang()))
+        : ''}</div>
       <div id="speak-actions" style="display:none">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
           <button class="btn btn-subtle" onclick="nextPhrase()">SIGUIENTE →</button>
           <button class="btn btn-ghost"  onclick="saveSpeak()">GUARDAR</button>
         </div>
       </div>
+    </div>
+
+    <!-- La frase del día es una frase; en el mostrador te contestan. Aquí se
+         practica eso antes de que pase: la IA hace de la otra persona y corrige
+         lo que digas. Entra por un btn-subtle, sin btn-primary. -->
+    <div class="glass-card" style="margin-top:8px">
+      <div class="card-title">CONVERSAR</div>
+      <div style="font-size:0.78rem;color:var(--text-2);line-height:1.6;margin-bottom:12px">
+        ${frances
+          ? 'Practica la panadería, la estación, la régie… antes de llegar. La IA hace de la otra persona, te contesta en francés y te corrige lo que digas.'
+          : 'Practica una conversación de tu trabajo o del día a día. La IA hace de la otra persona, te contesta y te corrige lo que digas.'}
+      </div>
+      <button class="btn btn-subtle" onclick="iaSpeakConversar()">${typeof ico === 'function' ? ico('speak', 16) : ''} CONVERSAR CON IA</button>
     </div>
 
     ${frances ? speakTarjetasFrances() : ''}
@@ -130,6 +172,7 @@ function renderSpeakSection() {
     </div>
   `;
 
+  iaSpeakVigilarDictado();
   loadSpeakHistory();
   // Vive en writing.js (comparte pantalla con las tareas escritas del C1).
   if (typeof loadSpeakingTasks === 'function') loadSpeakingTasks();
@@ -204,15 +247,11 @@ function toggleRecording() {
   const status = document.getElementById('speak-status');
   const transcript = document.getElementById('speak-transcript');
 
-  // Sin reconocimiento de voz: modo manual (escucha y repite, autopuntúa).
+  // Sin reconocimiento de voz (el iPhone con la app instalada): se repite en
+  // alto y, para que la IA diga qué se entiende, se dicta con el micro del
+  // teclado. Nada de esto marca HABLAR: no ha pasado por el micro de la app.
   if (!SpeechRec) {
-    transcript.style.display = 'block';
-    transcript.innerHTML = `
-      <div style="font-family:var(--font-mono);font-size:0.55rem;color:var(--text-3);margin-bottom:6px;letter-spacing:2px">MODO SIN MICRO</div>
-      <div style="color:var(--text-2);font-size:0.8rem">Este navegador no transcribe voz (iOS lo limita). Escucha con <img src="src/img/icons/listen.png" alt="" class="ico">, repite en alto y puntúate al guardar.</div>`;
-    document.getElementById('speak-actions').style.display = 'block';
-    _lastTranscript = '[repetido en voz alta]';
-    _lastScore = null;
+    iaSpeakMostrarDictado('Aquí la app no puede usar el micro (el iPhone no lo deja con la app instalada).');
     return;
   }
 
@@ -221,7 +260,9 @@ function toggleRecording() {
   _recognition = new SpeechRec();
   _recognition.lang = typeof idiomaVoz === 'function' ? idiomaVoz() : 'en-GB';
   _recognition.interimResults = false;
-  _recognition.maxAlternatives = 1;
+  // Cinco y no una: la segunda y la tercera dicen qué otra cosa pudo entender
+  // el móvil, que es justo lo que lee la IA para decir qué sonido falla.
+  _recognition.maxAlternatives = 5;
 
   _recognition.onstart = () => {
     _isRecording = true;
@@ -234,6 +275,11 @@ function toggleRecording() {
     _isRecording = false;
     btn.classList.remove('recording');
     btn.innerHTML = '<img src="src/img/icons/mic.png" alt="" class="ico">';
+    // Un permiso denegado o un micro que no existe no se arreglan pulsando
+    // otra vez: ahí se ofrece dictar con el teclado.
+    if (IA_SPEAK_SIN_SALIDA.has(e.error)) {
+      iaSpeakMostrarDictado(typeof iaTextoErrorMicro === 'function' ? escaparHtml(iaTextoErrorMicro(e.error)) : 'El micrófono no funciona.');
+    }
   };
   _recognition.onend = () => {
     _isRecording = false;
@@ -242,15 +288,18 @@ function toggleRecording() {
     if (status.textContent.includes('ESCUCHANDO')) status.textContent = 'TOCA EL MICRO PARA REPETIR';
   };
   _recognition.onresult = (ev) => {
-    const said = ev.results[0][0].transcript;
+    const alts = iaAlternativasDe(ev.results[0]);
+    if (!alts.length) return;
+    const said = alts[0].transcript;
     const score = scoreSpeech(_currentPhrase.phrase, said);
     _lastTranscript = said;
     _lastScore = score;
+    iaSpeakAlternativas = alts;
     const color = score >= 80 ? 'var(--success)' : score >= 50 ? 'var(--warning)' : 'var(--danger)';
     transcript.style.display = 'block';
     transcript.innerHTML = `
       <div style="font-family:var(--font-mono);font-size:0.55rem;color:var(--text-3);margin-bottom:6px;letter-spacing:2px">TE HE OÍDO:</div>
-      <div style="color:var(--text-2)">"${said}"</div>
+      <div style="color:var(--text-2)">"${escaparHtml(said)}"</div>
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--surface-2);display:flex;justify-content:space-between;align-items:center">
         <span style="font-size:0.7rem;color:var(--text-3)">Reconocimiento</span>
         <span style="font-family:var(--font-mono);font-weight:700;color:${color}">${score}%</span>
@@ -261,12 +310,101 @@ function toggleRecording() {
       <div style="font-size:0.62rem;color:var(--text-4);margin-top:6px;line-height:1.45">
         Mide si el móvil te ha entendido, no tu pronunciación: el reconocedor
         corrige hacia lo que espera oír.
-      </div>`;
+      </div>
+      <!-- La IA lee las cinco alternativas del reconocedor: si la segunda dice
+           "ship" donde tocaba "sheep", ahí está el sonido que falla. -->
+      <div class="ia-acciones">
+        <button class="btn btn-subtle btn-sm" onclick="iaSpeakPorQue(this)">¿POR QUÉ? · IA</button>
+      </div>
+      <div id="ia-speak-pron"></div>`;
     document.getElementById('speak-actions').style.display = 'block';
   };
 
   try { _recognition.start(); }
   catch { status.textContent = 'NO SE PUDO INICIAR EL MICRO'; }
+}
+
+// ── LA IA EN HABLAR ──────────────────────────────────────
+
+// Errores del micro que no se arreglan pulsando otra vez: ahí se ofrece dictar.
+const IA_SPEAK_SIN_SALIDA = new Set(['not-allowed', 'service-not-allowed', 'audio-capture', 'network']);
+
+/**
+ * Modo sin micro: la caja del transcript con el campo para dictar la frase con
+ * el micro del teclado (ia.js) y pedir a la IA qué se entendió. `motivo` es
+ * HTML ya escapado. No se repinta si ya está, o borraría lo que se ha dictado.
+ */
+function iaSpeakMostrarDictado(motivo) {
+  const transcript = document.getElementById('speak-transcript');
+  if (!transcript || !_currentPhrase) return;
+  transcript.style.display = 'block';
+  // Con micro (y el permiso denegado, o sin micrófono físico) el campo ya está
+  // debajo, plegado: se abre ése en vez de pintar otro con el mismo id, y el
+  // aviso va solo.
+  const plegado = document.getElementById('speak-teclado')?.querySelector('.ia-plegable');
+  const aviso = `
+      <div style="font-family:var(--font-mono);font-size:0.55rem;color:var(--text-3);margin-bottom:6px;letter-spacing:2px">MODO SIN MICRO</div>
+      <div style="color:var(--text-2);font-size:0.8rem;line-height:1.5">${motivo}
+        Escúchala con <img src="src/img/icons/listen.png" alt="" class="ico">, repítela en alto y,
+        si quieres que la IA te diga qué se entiende, díctala con el micro del teclado${plegado ? ', aquí debajo' : ''}.</div>`;
+  if (plegado) {
+    plegado.open = true;
+    transcript.innerHTML = aviso;
+  } else if (!document.getElementById('speak-dict')) {
+    transcript.innerHTML = aviso + iaHtmlDictadoPron('speak-dict', _currentPhrase.phrase, iaSpeakLang());
+    iaSpeakVigilarDictado();
+  }
+  document.getElementById('speak-actions').style.display = 'block';
+  _lastTranscript = '[repetido en voz alta]';
+  _lastScore = null;
+  iaSpeakAlternativas = [];
+  // Dentro del toque, el iPhone abre el teclado: queda a un toque del micro.
+  document.getElementById('speak-dict-txt')?.focus();
+}
+
+/**
+ * Apunta lo que se dicta en el campo (para GUARDAR) y, con lo primero que se
+ * dicte, enseña SIGUIENTE / GUARDAR: con micro sólo salían tras un intento que
+ * el reconocedor entendiera, y con "no-speech" seguido no se podía pasar de
+ * frase. No toca `_lastScore`: dictar no marca HABLAR.
+ */
+function iaSpeakVigilarDictado() {
+  const campo = document.getElementById('speak-dict-txt');
+  if (!campo?.addEventListener) return;
+  const apuntar = () => {
+    const v = String(campo.value || '').trim();
+    if (!v) return;
+    iaSpeakDictado = v;
+    const acciones = document.getElementById('speak-actions');
+    if (acciones) acciones.style.display = 'block';
+  };
+  campo.addEventListener('input', apuntar);
+  campo.addEventListener('change', apuntar);
+}
+
+/**
+ * «¿POR QUÉ? · IA» tras grabar: el diagnóstico de las 5 alternativas. Si sale
+ * bien el botón se quita, como en SONIDOS: otro toque pagaría la misma
+ * respuesta y sumaría los mismos errores al repaso. Vuelve con el siguiente
+ * intento, que repinta la caja entera.
+ */
+async function iaSpeakPorQue(btn) {
+  const caja = document.getElementById('ia-speak-pron');
+  if (!_currentPhrase || !iaSpeakAlternativas.length || !caja) { toast('Dila primero con el micro', 'error'); return; }
+  await iaDiagnosticarPron({
+    objetivo: _currentPhrase.phrase, alternativas: iaSpeakAlternativas,
+    lang: iaSpeakLang(), caja, btn,
+  });
+  if (caja.querySelector('.ia-caja') && btn?.isConnected) btn.remove();
+}
+
+/** Abre CONVERSAR (charla.js) con su selector de situaciones y escenarios. */
+function iaSpeakConversar() {
+  if (typeof charlaAbrir !== 'function') { toast('La conversación con IA no está disponible', 'error'); return; }
+  // Que el micro de esta pantalla no siga abierto debajo de la conversación.
+  if (_isRecording) { try { _recognition?.abort(); } catch { /* ya parado */ } }
+  if (typeof vozParar === 'function') vozParar();
+  charlaAbrir();
 }
 
 function nextPhrase() {
@@ -275,17 +413,20 @@ function nextPhrase() {
 }
 
 async function saveSpeak() {
-  // Guardar práctica de speaking (sin score real por ahora)
+  // Sólo hubo micro si el reconocedor devolvió algo: es lo único que deja
+  // `_lastScore`. Repetirla en alto o dictarla con el teclado se guarda en el
+  // historial, pero no marca HABLAR (ver CLAUDE.md: "una meta que se marca
+  // sola no es una meta").
+  const hubloMicro = _lastScore != null;
+  const dictado = document.getElementById('speak-dict-txt')?.value.trim() || iaSpeakDictado;
   try {
     await apiPost('/speaking-practice', {
       phrase_en: _currentPhrase.phrase,
-      user_transcript: _lastTranscript || '[grabado]',
+      user_transcript: hubloMicro ? _lastTranscript : (dictado || _lastTranscript || '[grabado]'),
       score: _lastScore,
       notes: _currentPhrase.topic
     });
-    // Marcar meta de speaking como completada
-    const today = hoyLocal();
-    await apiPut(`/daily-goals/${today}`, { speaking_done: true });
+    if (hubloMicro) await apiPut(`/daily-goals/${hoyLocal()}`, { speaking_done: true });
     toast('Práctica guardada', 'success');
     await apiPost('/study-sessions', { type: 'speaking', duration_minutes: 5 });
     showXpPop(15);
@@ -309,7 +450,7 @@ async function loadSpeakHistory() {
         ? `<span style="font-family:var(--font-mono);font-weight:700;color:${r.score >= 80 ? 'var(--success)' : r.score >= 50 ? 'var(--warning)' : 'var(--danger)'}">${r.score}%</span>`
         : '<span style="font-size:0.65rem;color:var(--text-3)">—</span>';
       return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--surface-2)">
-        <span style="font-size:0.72rem;color:var(--text-2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">"${r.phrase_en}"</span>
+        <span style="font-size:0.72rem;color:var(--text-2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">"${escaparHtml(r.phrase_en)}"</span>
         ${sc}
       </div>`;
     }).join('');

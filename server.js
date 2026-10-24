@@ -1558,6 +1558,24 @@ app.get('/speaking/tasks', async (req, res) => {
 // puede enseñar tal cual: `fallo()` los taparía todos con la misma frase.
 
 const frenoIA = ia.crearFreno();
+// Una petición idéntica, una llamada (ver crearUnaVez en lib/ia.js).
+const unaVezIA = ia.crearUnaVez();
+const huellaIA = (...partes) => crypto.createHash('sha256').update(JSON.stringify(partes)).digest('hex');
+
+// Lo que puede tardar cada función, por intento, y cuántas veces se reintenta.
+// El móvil espera más que el peor caso (IA_TIEMPO_CORTO / IA_TIEMPO_MAX en
+// src/js/ia.js): si se rinde antes, el servidor sigue y cobra igual. Un
+// reintento basta: los 529 (sobrecarga) vuelven en un instante y el segundo
+// intento suele entrar; un tercero sólo alargaba la espera.
+const TIEMPOS_IA = {
+  pronunciacion: { timeout: 40_000, maxRetries: 1 },
+  conversacion:  { timeout: 40_000, maxRetries: 1 },
+  prueba:        { timeout: 40_000, maxRetries: 1 },
+  escritura:     { timeout: 100_000, maxRetries: 1 },
+  oral:          { timeout: 100_000, maxRetries: 1 },
+  consejo:       { timeout: 100_000, maxRetries: 1 },
+};
+
 const ESTADO_HTTP_IA = {
   sin_clave: 503, sin_token: 403, tope: 402, freno: 429, sin_credito: 402,
   clave_mala: 502, limite: 429, rechazo: 422, incompleta: 502, api: 502,
@@ -1635,6 +1653,7 @@ async function pedirIA({ funcion, lang, sistema, usuario, esquema, effort, maxTo
     const r = await ia.llamarClaude({
       cliente: ia.clienteCon(clave, process.env.ANTHROPIC_BASE_URL ? { baseURL: process.env.ANTHROPIC_BASE_URL } : {}),
       modelo: aj.modelo, sistema, usuario, esquema, effort, maxTokens,
+      ...(TIEMPOS_IA[funcion] || TIEMPOS_IA.escritura),
     });
     await anotarUsoIA(funcion, lang, r);
     console.log(`[ia] ${funcion} ${lang || ''} · ${r.servidoPor}${r.fallback ? ' (reenvío)' : ''} · ${r.tokens.entrada}+${r.tokens.cache_leida}c/${r.tokens.salida} tok · ${r.coste.toFixed(4)} $ · ${Date.now() - t0} ms`);
@@ -1646,6 +1665,16 @@ async function pedirIA({ funcion, lang, sistema, usuario, esquema, effort, maxTo
     }
     throw e;
   }
+}
+
+/**
+ * Responde con lo que devuelva `fn` o, si esta misma petición se acaba de hacer
+ * (un reintento tras un corte), con la respuesta guardada: gratis, sin volver a
+ * guardar nada ni a contar los errores otra vez.
+ */
+async function responderUnaVezIA(res, clave, fn) {
+  const { valor, repetida } = await unaVezIA.hacer(clave, fn);
+  res.json(repetida ? { ...valor, coste: 0, tarjetas: [], repetida: true } : valor);
 }
 
 function falloIA(res, e) {
@@ -1805,29 +1834,31 @@ app.post('/ia/pronunciacion', async (req, res) => {
     .filter((a) => a.transcript);
   try {
     const lang = await langDeCuerpo(req);
-    let figurada = [];
-    if (lang === 'en') {
-      const palabras = [...new Set(pron.palabrasDe(objetivo))].slice(0, 14);
-      const buscar = await cargarIpa(palabras.join(' '));
-      figurada = palabras
-        .map((p) => ({ palabra: p, f: pron.figurarPalabra(p, buscar) }))
-        .filter((x) => x.f?.texto)
-        .map((x) => ({ palabra: x.palabra, figurada: x.f.texto }));
-    }
-    const r = await pedirIA({
-      funcion: 'pronunciacion', lang,
-      sistema: iaP.SISTEMA_PRONUNCIACION,
-      usuario: iaP.mensajePronunciacion({ lang, objetivo, alternativas, figurada, perfil: await perfilIA(lang) }),
-      esquema: iaP.RespuestaPronunciacion, effort: 'low', maxTokens: 4000,
-    });
-    const d = r.datos;
-    const figDe = new Map(figurada.map((f) => [f.palabra.toLowerCase(), f.figurada]));
-    const tarjetas = await registrarErroresIA(lang, d.errores, 'pronunciacion');
-    res.json({
-      ...d,
-      puntuacion: iaP.acotar(d.puntuacion, 0, 100),
-      palabras: (d.palabras || []).slice(0, 6).map((p) => ({ ...p, figurada: figDe.get(String(p.palabra).toLowerCase()) || null })),
-      coste: r.coste, tarjetas,
+    await responderUnaVezIA(res, huellaIA('pronunciacion', lang, objetivo, alternativas), async () => {
+      let figurada = [];
+      if (lang === 'en') {
+        const palabras = [...new Set(pron.palabrasDe(objetivo))].slice(0, 14);
+        const buscar = await cargarIpa(palabras.join(' '));
+        figurada = palabras
+          .map((p) => ({ palabra: p, f: pron.figurarPalabra(p, buscar) }))
+          .filter((x) => x.f?.texto)
+          .map((x) => ({ palabra: x.palabra, figurada: x.f.texto }));
+      }
+      const r = await pedirIA({
+        funcion: 'pronunciacion', lang,
+        sistema: iaP.SISTEMA_PRONUNCIACION,
+        usuario: iaP.mensajePronunciacion({ lang, objetivo, alternativas, figurada, perfil: await perfilIA(lang) }),
+        esquema: iaP.RespuestaPronunciacion, effort: 'low', maxTokens: 4000,
+      });
+      const d = r.datos;
+      const figDe = new Map(figurada.map((f) => [f.palabra.toLowerCase(), f.figurada]));
+      const tarjetas = await registrarErroresIA(lang, d.errores, 'pronunciacion');
+      return {
+        ...d,
+        puntuacion: iaP.acotar(d.puntuacion, 0, 100),
+        palabras: (d.palabras || []).slice(0, 6).map((p) => ({ ...p, figurada: figDe.get(String(p.palabra).toLowerCase()) || null })),
+        coste: r.coste, tarjetas,
+      };
     });
   } catch (e) { falloIA(res, e); }
 });
@@ -1865,19 +1896,26 @@ app.post('/ia/conversacion', async (req, res) => {
     }
     const c = await leerConfig([lang === 'fr' ? 'nivel_medido_fr' : 'nivel_medido']);
     const nivel = c.nivel_medido_fr || c.nivel_medido || null;
-    const r = await pedirIA({
-      funcion: 'conversacion', lang,
-      sistema: iaP.SISTEMA_CONVERSACION,
-      usuario: iaP.mensajeConversacion({ lang, situacion, papel, nivel, historial, mensaje, perfil: await perfilIA(lang) }),
-      esquema: iaP.RespuestaConversacion, effort: 'low', maxTokens: 3000,
-    });
-    const d = r.datos;
-    const tarjetas = mensaje ? await registrarErroresIA(lang, d.errores, 'conversacion') : [];
-    // Hablar con el micrófono en una conversación es hablar: marca HABLAR.
-    // Con el dictado del teclado no hay forma de saber si se dictó o se tecleó,
-    // así que no cuenta (la regla de las metas que se marcan solas).
-    if (mensaje && b.via === 'voz') await marcarHabladoIA('Conversación con IA');
-    res.json({ ...d, sugerencias: (d.sugerencias || []).slice(0, 3), lang, coste: r.coste, tarjetas });
+    const turno = async () => {
+      const r = await pedirIA({
+        funcion: 'conversacion', lang,
+        sistema: iaP.SISTEMA_CONVERSACION,
+        usuario: iaP.mensajeConversacion({ lang, situacion, papel, nivel, historial, mensaje, perfil: await perfilIA(lang) }),
+        esquema: iaP.RespuestaConversacion, effort: 'low', maxTokens: 3000,
+      });
+      const d = r.datos;
+      const tarjetas = mensaje ? await registrarErroresIA(lang, d.errores, 'conversacion') : [];
+      // Hablar con el micrófono en una conversación es hablar: marca HABLAR.
+      // Con el dictado del teclado no hay forma de saber si se dictó o se tecleó,
+      // así que no cuenta (la regla de las metas que se marcan solas).
+      if (mensaje && b.via === 'voz') await marcarHabladoIA('Conversación con IA');
+      return { ...d, sugerencias: (d.sugerencias || []).slice(0, 3), lang, coste: r.coste, tarjetas };
+    };
+    // La apertura (sin mensaje) no se recuerda: OTRA VEZ en la misma escena
+    // tiene que poder empezar de otra forma.
+    if (!mensaje) return res.json(await turno());
+    await responderUnaVezIA(res,
+      huellaIA('conversacion', lang, situacion, papel, historial, mensaje, b.via === 'voz'), turno);
   } catch (e) { falloIA(res, e); }
 });
 
@@ -1895,20 +1933,22 @@ app.post('/ia/escritura', async (req, res) => {
   try {
     const { rows: [tarea] } = await db('SELECT * FROM writing_tasks WHERE id = $1', [taskId]);
     if (!tarea) return res.status(404).json({ error: 'Tarea no encontrada' });
-    const r = await pedirIA({
-      funcion: 'escritura', lang: tarea.lang,
-      sistema: iaP.SISTEMA_ESCRITURA,
-      usuario: iaP.mensajeEscritura({ tarea, texto, palabras, perfil: await perfilIA(tarea.lang) }),
-      esquema: iaP.RespuestaEscritura, effort: 'medium', maxTokens: 16000,
-    });
-    const d = r.datos;
-    const notas = Object.fromEntries(['content', 'achievement', 'organisation', 'language']
-      .map((k) => [k, iaP.acotar(d.notas?.[k], 0, 5)]));
-    const tarjetas = await registrarErroresIA(tarea.lang, d.errores, 'escritura');
-    res.json({
-      ...d, notas, total: Object.values(notas).reduce((a, b) => a + b, 0),
-      correcciones: (d.correcciones || []).slice(0, 15),
-      cuenta_examen: tarea.nivel === 'C1', coste: r.coste, tarjetas,
+    await responderUnaVezIA(res, huellaIA('escritura', taskId, texto), async () => {
+      const r = await pedirIA({
+        funcion: 'escritura', lang: tarea.lang,
+        sistema: iaP.SISTEMA_ESCRITURA,
+        usuario: iaP.mensajeEscritura({ tarea, texto, palabras, perfil: await perfilIA(tarea.lang) }),
+        esquema: iaP.RespuestaEscritura, effort: 'medium', maxTokens: 16000,
+      });
+      const d = r.datos;
+      const notas = Object.fromEntries(['content', 'achievement', 'organisation', 'language']
+        .map((k) => [k, iaP.acotar(d.notas?.[k], 0, 5)]));
+      const tarjetas = await registrarErroresIA(tarea.lang, d.errores, 'escritura');
+      return {
+        ...d, notas, total: Object.values(notas).reduce((a, b) => a + b, 0),
+        correcciones: (d.correcciones || []).slice(0, 15),
+        cuenta_examen: tarea.nivel === 'C1', coste: r.coste, tarjetas,
+      };
     });
   } catch (e) { falloIA(res, e); }
 });
@@ -1929,34 +1969,51 @@ app.post('/ia/oral', async (req, res) => {
   try {
     const { rows: [tarea] } = await db('SELECT * FROM speaking_tasks WHERE id = $1', [taskId]);
     if (!tarea) return res.status(404).json({ error: 'Tarea no encontrada' });
-    const r = await pedirIA({
-      funcion: 'oral', lang: tarea.lang,
-      sistema: iaP.SISTEMA_ORAL,
-      usuario: iaP.mensajeOral({ tarea, transcripcion, segundos, palabras, via, perfil: await perfilIA(tarea.lang) }),
-      esquema: iaP.RespuestaOral, effort: 'medium', maxTokens: 12000,
-    });
-    const d = r.datos;
-    const notas = Object.fromEntries(['gramatica', 'lexico', 'discurso', 'tarea']
-      .map((k) => [k, iaP.acotar(d.notas?.[k], 0, 5)]));
-    const total = Object.values(notas).reduce((a, x) => a + x, 0);
-    const feedback = { ...d, notas };
-    const { rows: [fila] } = await db(
-      `INSERT INTO speaking_submissions (profile_id, task_id, lang, transcript, segundos, via,
-         gramatica, lexico, discurso, tarea, nivel_estimado, ia_feedback)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
-      [PROFILE_ID, taskId, tarea.lang, transcripcion, segundos, via,
-       notas.gramatica, notas.lexico, notas.discurso, notas.tarea, d.nivel_estimado, JSON.stringify(feedback)]);
-    // Igual que en ESCRIBIR: sólo una tarea C1 dice algo del nivel de examen.
-    if (tarea.nivel === 'C1') {
-      await db(
-        `INSERT INTO exam_attempts (profile_id, date, section, score, max_score, notes, lang)
-         VALUES ($1,$2,'speaking',$3,20,$4,$5)`,
-        [PROFILE_ID, todayStr(), total, `Oral · parte ${tarea.part} · corregido con IA`, tarea.lang]);
+    const cuenta_examen = tarea.nivel === 'C1';
+    // El oral se GUARDA, así que un reintento no puede llegar a la IA: ni
+    // pagaría otra vez, sino que dejaría dos entregas (y dos notas de examen en
+    // C1). La memoria de unaVezIA se pierde cuando Render duerme la app; la
+    // base, no.
+    const { rows: [ya] } = await db(
+      `SELECT id, ia_feedback FROM speaking_submissions
+        WHERE profile_id = $1 AND task_id = $2 AND transcript = $3
+          AND created_at > NOW() - INTERVAL '15 minutes'
+        ORDER BY id DESC LIMIT 1`, [PROFILE_ID, taskId, transcripcion]);
+    if (ya?.ia_feedback) {
+      const f = typeof ya.ia_feedback === 'string' ? JSON.parse(ya.ia_feedback) : ya.ia_feedback;
+      const total = Object.values(f.notas || {}).reduce((a, x) => a + (Number(x) || 0), 0);
+      return res.json({ id: ya.id, ...f, total, cuenta_examen, coste: 0, tarjetas: [], repetida: true });
     }
-    if (via === 'voz') await marcarHabladoIA(`Oral: ${tarea.title}`.slice(0, 200));
-    await addXp(20);
-    const tarjetas = await registrarErroresIA(tarea.lang, d.errores, 'oral');
-    res.json({ id: fila.id, ...feedback, total, cuenta_examen: tarea.nivel === 'C1', coste: r.coste, tarjetas });
+    await responderUnaVezIA(res, huellaIA('oral', taskId, transcripcion), async () => {
+      const r = await pedirIA({
+        funcion: 'oral', lang: tarea.lang,
+        sistema: iaP.SISTEMA_ORAL,
+        usuario: iaP.mensajeOral({ tarea, transcripcion, segundos, palabras, via, perfil: await perfilIA(tarea.lang) }),
+        esquema: iaP.RespuestaOral, effort: 'medium', maxTokens: 12000,
+      });
+      const d = r.datos;
+      const notas = Object.fromEntries(['gramatica', 'lexico', 'discurso', 'tarea']
+        .map((k) => [k, iaP.acotar(d.notas?.[k], 0, 5)]));
+      const total = Object.values(notas).reduce((a, x) => a + x, 0);
+      const feedback = { ...d, notas };
+      const { rows: [fila] } = await db(
+        `INSERT INTO speaking_submissions (profile_id, task_id, lang, transcript, segundos, via,
+           gramatica, lexico, discurso, tarea, nivel_estimado, ia_feedback)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+        [PROFILE_ID, taskId, tarea.lang, transcripcion, segundos, via,
+         notas.gramatica, notas.lexico, notas.discurso, notas.tarea, d.nivel_estimado, JSON.stringify(feedback)]);
+      // Igual que en ESCRIBIR: sólo una tarea C1 dice algo del nivel de examen.
+      if (cuenta_examen) {
+        await db(
+          `INSERT INTO exam_attempts (profile_id, date, section, score, max_score, notes, lang)
+           VALUES ($1,$2,'speaking',$3,20,$4,$5)`,
+          [PROFILE_ID, todayStr(), total, `Oral · parte ${tarea.part} · corregido con IA`, tarea.lang]);
+      }
+      if (via === 'voz') await marcarHabladoIA(`Oral: ${tarea.title}`.slice(0, 200));
+      await addXp(20);
+      const tarjetas = await registrarErroresIA(tarea.lang, d.errores, 'oral');
+      return { id: fila.id, ...feedback, total, cuenta_examen, coste: r.coste, tarjetas };
+    });
   } catch (e) { falloIA(res, e); }
 });
 

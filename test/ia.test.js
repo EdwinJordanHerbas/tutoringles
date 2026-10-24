@@ -204,3 +204,71 @@ test('los errores de la API llegan con un código que se puede explicar', async 
 test('sin clave no se construye cliente', () => {
   assert.throws(() => ia.clienteCon(''), (e) => e.codigo === 'sin_clave');
 });
+
+// ── Tiempos y reintentos ─────────────────────────────────
+// El móvil espera un tiempo fijo (src/js/ia.js) y el servidor tiene que acabar
+// antes. Con los valores del SDK (120 s × 3 intentos) el móvil se rendía, el
+// servidor seguía y cobraba igual.
+
+test('el tiempo máximo y los reintentos van por petición', async () => {
+  const f = await falso.arrancar(0, { retrasoMs: 600 });
+  try {
+    // Cliente con reintentos de sobra: manda lo que diga la petición.
+    const cliente = ia.clienteCon('sk-ant-falso-tiempo-wwwwwwwwwwwwwwww', { baseURL: f.url, maxRetries: 5 });
+    const t0 = Date.now();
+    await assert.rejects(
+      ia.llamarClaude({ cliente, modelo: 'claude-opus-5-5', sistema: iaP.SISTEMA_PRONUNCIACION, usuario: 'x',
+        esquema: iaP.RespuestaPronunciacion, timeout: 150, maxRetries: 1 }),
+      (e) => e instanceof ia.ErrorIA);
+    assert.ok(Date.now() - t0 < 3000, 'no espera los 600 ms de cada intento');
+    assert.strictEqual(f.peticiones.length, 2, 'un intento y un reintento, no seis');
+  } finally { await f.cerrar(); }
+});
+
+// ── Una petición idéntica, una llamada ───────────────────
+
+test('una petición repetida recibe la respuesta guardada sin volver a llamar', async () => {
+  let t = 0, llamadas = 0;
+  const u = ia.crearUnaVez({ ttlMs: 1000, ahora: () => t });
+  const fn = async () => { llamadas++; return { nota: 7 }; };
+  assert.deepStrictEqual(await u.hacer('a', fn), { valor: { nota: 7 }, repetida: false });
+  assert.deepStrictEqual(await u.hacer('a', fn), { valor: { nota: 7 }, repetida: true });
+  assert.strictEqual(llamadas, 1);
+  await u.hacer('b', fn);
+  assert.strictEqual(llamadas, 2, 'otra petición sí llama');
+  t = 1001;
+  assert.strictEqual((await u.hacer('a', fn)).repetida, false, 'pasado el plazo, se vuelve a pedir');
+  assert.strictEqual(llamadas, 3);
+});
+
+test('dos peticiones iguales a la vez esperan a la misma llamada', async () => {
+  const u = ia.crearUnaVez();
+  let llamadas = 0, soltar;
+  const fn = () => { llamadas++; return new Promise((ok) => { soltar = () => ok('hecho'); }); };
+  const p1 = u.hacer('x', fn);
+  const p2 = u.hacer('x', fn);
+  await new Promise((r) => setImmediate(r));
+  soltar();
+  const [r1, r2] = await Promise.all([p1, p2]);
+  assert.strictEqual(llamadas, 1);
+  assert.strictEqual(r1.valor, 'hecho');
+  assert.strictEqual(r2.valor, 'hecho');
+  assert.strictEqual(r2.repetida, true);
+});
+
+test('lo que falla no se guarda: el reintento sí llama', async () => {
+  const u = ia.crearUnaVez();
+  let llamadas = 0;
+  const falla = async () => { llamadas++; throw new ia.ErrorIA('api', 'caída'); };
+  await assert.rejects(u.hacer('k', falla), (e) => e.codigo === 'api');
+  await assert.rejects(u.hacer('k', falla), (e) => e.codigo === 'api');
+  assert.strictEqual(llamadas, 2);
+  assert.strictEqual((await u.hacer('k', async () => 'ok')).repetida, false);
+});
+
+test('la memoria de respuestas tiene tope', async () => {
+  const u = ia.crearUnaVez({ max: 3 });
+  for (const k of ['a', 'b', 'c', 'd']) await u.hacer(k, async () => k);
+  assert.strictEqual(u._hechas.size, 3);
+  assert.ok(!u._hechas.has('a'), 'se va la más antigua');
+});

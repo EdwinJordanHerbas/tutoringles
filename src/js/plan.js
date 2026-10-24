@@ -18,7 +18,9 @@ async function loadPlanToday() {
         <p style="font-size:0.8rem;color:var(--text-2);line-height:1.6;margin-bottom:14px">
           Un sprint guiado: cada día una situación real de tu trabajo, un lote de vocabulario, un foco de gramática y una tarea de speaking, con mini-simulacros por el camino.
         </p>
-        <button class="btn btn-primary" onclick="startPlan()">EMPEZAR PLAN →</button>`;
+        <button class="btn btn-subtle" onclick="startPlan()">EMPEZAR PLAN →</button>`;
+      // Secundario a propósito: está en HOY, y en HOY el único primario es
+      // EMPEZAR (ver index.html). Antes también era primario y competía con él.
       return;
     }
 
