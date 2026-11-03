@@ -196,7 +196,7 @@ test('el aviso diario dice en qué idioma toca', () => {
 test('sólo son idiomas los que existen, no las propiedades de cualquier objeto', () => {
   const { esIdioma, normalizarIdioma } = require('../lib/idiomas');
   assert.ok(esIdioma('fr') && esIdioma('en'));
-  for (const x of ['constructor', 'toString', '__proto__', 'de', '', null, undefined]) {
+  for (const x of ['constructor', 'toString', '__proto__', 'it', '', null, undefined]) {
     assert.strictEqual(esIdioma(x), false, String(x));
   }
   assert.strictEqual(normalizarIdioma('constructor'), 'en');

@@ -87,8 +87,66 @@ const SONS_FR = [
   },
 ];
 
+// Los del alemán (3-nov-2026). Mismo molde: [palabra, traducción, palabra, traducción].
+const SONS_DE = [
+  {
+    slug: 'de-u', titulo: 'ü / u', a: 'ü', b: 'u',
+    porque: 'El español no tiene la ü. Si dices «Küche» con u, suena a «Kuchen»: cocina y pastel.',
+    como: 'Pon los labios como para decir «u» y, sin moverlos, di «i». La u de «Kuchen» es la nuestra.',
+    pares: [['Küche', 'cocina', 'Kuchen', 'pastel'], ['Brüder', 'hermanos', 'Bruder', 'hermano'],
+            ['Mütter', 'madres', 'Mutter', 'madre'], ['drücken', 'pulsar', 'drucken', 'imprimir'], ['für', 'para', 'fuhr', 'conducía']],
+  },
+  {
+    slug: 'de-o', titulo: 'ö / o', a: 'ö', b: 'o',
+    porque: 'La ö tampoco existe en español. «schön» es bonito y «schon», ya: se oyen en cualquier conversación.',
+    como: 'Pon los labios como para decir «o» y, sin moverlos, di «e».',
+    pares: [['schön', 'bonito', 'schon', 'ya'], ['Töchter', 'hijas', 'Tochter', 'hija'],
+            ['Öfen', 'hornos', 'Ofen', 'horno'], ['Böden', 'suelos', 'Boden', 'suelo']],
+  },
+  {
+    slug: 'de-ei', titulo: 'ei / ie', a: 'ei', b: 'ie',
+    porque: 'Se leen al revés de lo que parece: ei suena «ai» e ie suena «i». Es el fallo de lectura más común.',
+    como: 'Truco: se dice la segunda letra en inglés. «Wein» = vain, «Wien» = vin.',
+    pares: [['Wein', 'vino', 'Wien', 'Viena'], ['Reise', 'viaje', 'Riese', 'gigante'],
+            ['Beine', 'piernas', 'Biene', 'abeja'], ['leider', 'por desgracia', 'Lieder', 'canciones']],
+  },
+  {
+    slug: 'de-ch', titulo: 'ch suave / sch', a: 'ch', b: 'sch',
+    porque: 'La ch de «ich» no es jota ni sh: si dices «Kirche» con sh, dices «Kirsche»: iglesia y cereza.',
+    como: 'Di «yyy» sin voz, soplando entre la lengua y el paladar: es la ch de «ich». La sch es la sh de siempre.',
+    pares: [['Kirche', 'iglesia', 'Kirsche', 'cereza'], ['mich', 'me', 'misch', 'mezcla'],
+            ['Löcher', 'agujeros', 'Löscher', 'extintor']],
+  },
+  {
+    slug: 'de-z', titulo: 'z / s', a: 'z', b: 's',
+    porque: 'La z alemana es «ts», nunca nuestra z. Y la s delante de vocal vibra un poco.',
+    como: 'Di «ts» de golpe, como en «pizza». «Zimmer» es TSI-ma.',
+    pares: [['zehn', 'diez', 'sehen', 'ver'], ['Zeit', 'tiempo', 'seit', 'desde'],
+            ['zagen', 'dudar', 'sagen', 'decir'], ['Zeile', 'línea', 'Seile', 'cuerdas']],
+  },
+  {
+    slug: 'de-w', titulo: 'w / b', a: 'w', b: 'b',
+    porque: 'En alemán la w es una v con los dientes, y la b es otra cosa. «Wein» es vino y «Bein», pierna.',
+    como: 'Para la w, apoya los dientes de arriba en el labio de abajo. Para la b, cierra los labios.',
+    pares: [['Wein', 'vino', 'Bein', 'pierna'], ['wir', 'nosotros', 'Bier', 'cerveza'],
+            ['Wald', 'bosque', 'bald', 'pronto'], ['Wort', 'palabra', 'Bord', 'borde']],
+  },
+  {
+    slug: 'de-h', titulo: 'h / sin h', a: 'h', b: 'sin h',
+    porque: 'La h alemana suena, pero suave: un soplo. Si no la dices, «Hund» se vuelve «und».',
+    como: 'Echa aire como para empañar un cristal. No raspes la garganta: no es nuestra jota.',
+    pares: [['Hund', 'perro', 'und', 'y'], ['Haus', 'casa', 'aus', 'de'],
+            ['Hände', 'manos', 'Ende', 'final'], ['hier', 'aquí', 'ihr', 'vosotros']],
+  },
+];
+
+const sonsAleman = () => typeof _idioma !== 'undefined' && _idioma === 'de';
+const sonsBanco = () => (sonsAleman() ? SONS_DE : SONS_FR);
+const sonsVoz = () => (sonsAleman() ? 'de-DE' : 'fr-FR');
+const sonsNombre = () => (sonsAleman() ? 'alemán' : 'francés');
+
 const SONS_RONDA = 8;
-const SONS_CLAVE = 'sons_fr';
+const sonsClave = () => (sonsAleman() ? 'sons_de' : 'sons_fr');
 
 let _sonsActual = null;
 let _sonsRonda = [];
@@ -96,43 +154,47 @@ let _sonsIdx = 0;
 let _sonsAciertos = 0;
 let _sonsRespondida = false;
 
-const sonsProgreso = () => { try { return JSON.parse(localStorage.getItem(SONS_CLAVE) || '{}'); } catch { return {}; } };
+const sonsProgreso = () => { try { return JSON.parse(localStorage.getItem(sonsClave()) || '{}'); } catch { return {}; } };
 // `...p[slug]` primero: en la misma entrada viven los campos de DECIRLO
 // (decir_mejor, decir_rondas), y la ronda de oído no los puede borrar.
 function sonsGuardar(slug, pct) {
   try {
     const p = sonsProgreso();
     p[slug] = { ...p[slug], mejor: Math.max(p[slug]?.mejor ?? 0, pct), rondas: (p[slug]?.rondas || 0) + 1 };
-    localStorage.setItem(SONS_CLAVE, JSON.stringify(p));
+    localStorage.setItem(sonsClave(), JSON.stringify(p));
   } catch {}
 }
 
 const sonsCaja = () => document.getElementById('pron-content');
 const sonsJs = (x) => JSON.stringify(x).replace(/"/g, '&quot;');
-const sonsDecir = (palabra, btn) => vozDecir(palabra, { btn, lang: 'fr-FR' });
+const sonsDecir = (palabra, btn) => vozDecir(palabra, { btn, lang: sonsVoz() });
 
 function initSons() {
   const c = sonsCaja();
   if (!c) return;
   const prog = sonsProgreso();
-  const sinVoz = typeof hayVozDe === 'function' && !hayVozDe('fr-FR');
+  const sinVoz = typeof hayVozDe === 'function' && !hayVozDe(sonsVoz());
+  const aleman = sonsAleman();
   c.innerHTML = `
     <div class="glass-card-accent anim-slide-up">
-      <div class="card-title">LOS SONIDOS DEL FRANCÉS</div>
-      <p style="font-size:0.78rem;color:var(--text-2);line-height:1.55">
+      <div class="card-title">LOS SONIDOS DEL ${aleman ? 'ALEMÁN' : 'FRANCÉS'}</div>
+      ${aleman ? `<p style="font-size:0.78rem;color:var(--text-2);line-height:1.55">
+        Siete parejas que un hispanohablante confunde y que cambian palabras enteras:
+        <b>Küche / Kuchen</b> es cocina y pastel. Primero el oído; después, DECIRLO.
+      </p>` : `<p style="font-size:0.78rem;color:var(--text-2);line-height:1.55">
         Nueve parejas que un hispanohablante no distingue de oído, y que cambian
         palabras enteras. Dos cambian hasta la gramática: <b>ils sont / ils ont</b>
         (son / tienen) y <b>le / les</b> (el / los). Primero el oído: lo que no se
         oye no se puede decir. Después, DECIRLO: la dices tú y el móvil te dice
         cuál de las dos ha entendido.
-      </p>
+      </p>`}
       ${sinVoz ? `<div class="pron-honestidad" style="margin-top:10px">
-        Tu móvil no tiene voz francesa instalada. Con la española la b y la v
-        suenan igual y esta ronda no tendría respuesta: instálala en Ajustes ›
+        Tu móvil no tiene voz ${aleman ? 'alemana' : 'francesa'} instalada. Con la española esta ronda no
+        tendría respuesta: instálala en Ajustes ›
         Accesibilidad › Contenido hablado › Voces.</div>` : ''}
     </div>
     <div id="sons-lista">
-      ${SONS_FR.map((s) => {
+      ${sonsBanco().map((s) => {
         const p = prog[s.slug];
         const marcas = iaSonsMarcas(p);
         return `
@@ -145,7 +207,7 @@ function initSons() {
         </div>`;
       }).join('')}
     </div>
-    <div class="glass-card" style="margin-top:8px">
+    <div class="glass-card" style="margin-top:8px;${aleman ? 'display:none' : ''}">
       <div class="card-title">Y LA R</div>
       <div style="font-size:0.78rem;color:var(--text-2);line-height:1.6">
         La r francesa se hace al fondo de la garganta, donde nuestra j, pero
@@ -157,7 +219,7 @@ function initSons() {
 }
 
 function abrirSon(slug) {
-  const s = SONS_FR.find((x) => x.slug === slug);
+  const s = sonsBanco().find((x) => x.slug === slug);
   const c = sonsCaja();
   if (!s || !c) return;
   _sonsActual = s;
@@ -446,7 +508,7 @@ function iaSonsGuardarDecir(slug, pct) {
       decir_rondas: (antes.decir_rondas || 0) + 1,
       decir_ultima: pct,
     };
-    localStorage.setItem(SONS_CLAVE, JSON.stringify(p));
+    localStorage.setItem(sonsClave(), JSON.stringify(p));
   } catch {}
 }
 
@@ -520,7 +582,7 @@ function iaSonsDecirPalabra() {
             onkeydown="if(event.key==='Enter'){event.preventDefault();iaSonsDecirComprobar()}">
           <button class="btn btn-subtle btn-sm" onclick="iaSonsDecirComprobar()">COMPROBAR</button>
         </div>
-        ${typeof iaHtmlPistaDictado === 'function' ? iaHtmlPistaDictado('fr') : ''}
+        ${typeof iaHtmlPistaDictado === 'function' ? iaHtmlPistaDictado(sonsAleman() ? 'de' : 'fr') : ''}
       </div>
       <div id="ia-sons-fb"></div>
     </div>`;
@@ -555,7 +617,7 @@ async function iaSonsDecirMicro(btn) {
   if (typeof vozParar === 'function') vozParar();
   try {
     const r = await iaEscucharFrase({
-      lang: 'fr', alternativas: 5,
+      lang: sonsAleman() ? 'de' : 'fr', alternativas: 5,
       alEmpezar: () => { poner(true); if (estado) estado.textContent = 'ESCUCHANDO…'; },
     });
     // Si mientras tanto se ha pasado de palabra (o de pantalla), no se juzga.
@@ -632,7 +694,7 @@ function iaSonsDecirJuzgar(alternativas, dictado) {
       ? `Ha entendido las dos palabras a la vez («${v.primera}»): di sólo «${it.obj}». Este no cuenta.`
       : v.primera
         ? `Ha entendido «${v.primera}», que no es ninguna de las dos. ${dictado
-          ? 'Mira que el teclado esté en francés y prueba otra vez.'
+          ? `Mira que el teclado esté en ${sonsNombre()} y prueba otra vez.`
           : 'Puede ser el micro o el ruido: prueba otra vez.'} Este no cuenta.`
         : 'No ha entendido nada. Acércate al micro y repite. Este no cuenta.';
   }
@@ -684,7 +746,7 @@ async function iaSonsDecirPorQue(btn) {
   const u = iaSonsDecirUltimo;
   const caja = document.getElementById('ia-sons-diag');
   if (!u || !caja || typeof iaDiagnosticarPron !== 'function') return;
-  await iaDiagnosticarPron({ objetivo: u.objetivo, alternativas: u.alternativas, lang: 'fr', caja, btn });
+  await iaDiagnosticarPron({ objetivo: u.objetivo, alternativas: u.alternativas, lang: sonsAleman() ? 'de' : 'fr', caja, btn });
   if (caja.querySelector('.ia-caja') && btn?.isConnected) btn.remove();
 }
 
@@ -710,7 +772,7 @@ function iaSonsDecirFin() {
   // Sólo se guarda si hubo algo que juzgar: una ronda saltada entera no es un 0 %.
   if (pct !== null && _sonsActual) iaSonsGuardarDecir(_sonsActual.slug, pct);
   const lectura = pct === null
-    ? 'No se ha podido comprobar ninguna: el móvil no ha entendido nada. Prueba en un sitio sin ruido o, si dictas, con el teclado en francés.'
+    ? `No se ha podido comprobar ninguna: el móvil no ha entendido nada. Prueba en un sitio sin ruido o, si dictas, con el teclado en ${sonsNombre()}.`
     : pct >= 85 ? 'Te entiende: ese sonido ya te sale. Ahora úsalo en frases enteras.'
     : pct > 60  ? 'Casi siempre te entiende, pero no todas. Repite las que han fallado, primero exagerando y luego normal.'
     : 'Todavía se te va al otro sonido. Vuelve a «Cómo se hace», escucha los pares y repite despacio: primero exagerado, luego normal.';

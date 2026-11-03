@@ -30,7 +30,7 @@ function renderGrammarList() {
   }
 
   // Agrupar por nivel
-  const byLevel = { B1: [], B2: [], C1: [] };
+  const byLevel = { A2: [], B1: [], B2: [], C1: [] };
   _gramTopics.forEach(t => {
     if (byLevel[t.level]) byLevel[t.level].push(t);
   });

@@ -4,9 +4,11 @@ App para aprender **inglés y francés** enfocada al día a día por sector (emp
 **dependiente**, que es el trabajo de Edwin en Sprinter) y de ahí hacia el **C1** de cada idioma:
 **Cambridge C1 Advanced** y **DALF C1**.
 
-**Desde el 27-sep-2026 el francés va primero**: Edwin se va a trabajar a un cantón francófono de
-Suiza en torno a un mes. Francés A2 (entiende mucho, no consigue explicarse), inglés B1. Ver
-"Dos idiomas y modo Tetris" más abajo.
+**Desde el 3-nov-2026 el plan es otro**: Edwin busca trabajo con contrato y alojamiento en
+cualquier país (Austria, Noruega, Irlanda, Finlandia, Islandia). **Inglés primero**, nivel real A2
+tirando a B1; **alemán** desde cero, con una entrevista en un hotel del Tirol; **francés en pausa**,
+sin borrar nada. Ver "Alemán e inglés para trabajar". Lo de "Dos idiomas" sigue siendo cómo
+funciona la app por dentro.
 
 **En producción** desde el 20-jul-2026. Hasta el 29-sep-2026 vivió en un droplet
 (`tutoringles.tinafusion.com`); el droplet ya no existe y ahora va en **Render + Neon, los dos
@@ -34,6 +36,25 @@ No hay build. Para arrancar en local en Windows: `iniciar-local.cmd`.
 
 **El service worker va por versión: al tocar cualquier JS hay que subir `VERSION` en `sw.js`**,
 o los usuarios se quedan con la versión cacheada.
+
+## Alemán e inglés para trabajar (3-nov-2026)
+
+- **El alemán es un tercer `lang`**, con el mismo mecanismo que el francés (`de`, voz `de-DE`,
+  puntuando más de-AT). El chip de la cabecera cicla `IDIOMA_CICLO` (en → de → fr). Migración 37.
+- **`claveNivel(lang)` y `NIVEL_REAL`** (lib/idiomas.js): cada idioma guarda su nivel aparte, y en
+  inglés y alemán la conversación usa el nivel real que Edwin declara, no el del test.
+- **Sectores nuevos**: `hotel-oesterreich` (de) y `trabajo-fuera` (en), 6 situaciones cada uno. El
+  perfil pasó a `trabajo-fuera`; `retail` sigue en la base pero ya no sale por defecto. La migración
+  37 la generó un script una sola vez: se corrige a mano.
+- **La figurada del alemán va escrita, no calculada**: `situation_lines.note` y `words.audio_hint`,
+  con la notación de la chuleta (mayúsculas = golpe de voz). `figurarSi` sigue siendo sólo del inglés.
+- **Pantallas sin contenido en alemán**: Examen y Escribir lo dicen; HOY no enseña test ni plan.
+  SONIDOS en alemán usa `SONS_DE` en sons.js, con el progreso en `sons_de`.
+- **HOY enseña la entrevista** en cualquier idioma hasta `ENTREVISTA_HASTA` (plan.js) y se quita
+  sola. Es secundaria: EMPEZAR sigue siendo el único primario.
+- **Despierta**: el cron de GitHub corría cada varias horas, así que la app se llama a sí misma de
+  día (`lib/despierto.js`, usa `RENDER_EXTERNAL_URL`) y la ejecución de medianoche de GitHub espera
+  hasta las 05:00 UTC para despertarla. Ver "Despliegue".
 
 ## Dos idiomas y modo Tetris (27-sep-2026)
 
@@ -682,6 +703,8 @@ que sea automático, dar acceso a Render al repo (su app de GitHub) desde el pan
   `.github/workflows/despierta.yml`, que llama a `/ping` cada 10 minutos (gratis: el repo es
   público). GitHub apaga los cron de un repo sin commits en 60 días: si los avisos dejan de
   llegar, mirar primero ahí.
+- **Desde el 3-nov-2026 la propia app se llama a `/ping`** cada 10 minutos dentro de la franja
+  (`lib/despierto.js`), porque el cron de GitHub se retrasaba horas.
 - **El keep-alive va sólo de 05:00 a 22:59 UTC** (07:00-01:00 en verano en Suiza). Las 750 horas
   gratis de Render son **por cuenta**, y en la misma cuenta vive otro servicio gratis
   (`n8n-neumorstudio`): esta app despierta 24 h se comería 744 y a final de mes Render

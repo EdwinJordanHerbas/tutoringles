@@ -119,11 +119,12 @@ const avisos      = require('./lib/avisos');
 const fechas      = require('./lib/fechas');
 const tetris      = require('./lib/tetris');
 const { fasesFrances } = require('./lib/fases');
-const { IDIOMAS, esIdioma, normalizarIdioma } = require('./lib/idiomas');
+const { IDIOMAS, esIdioma, normalizarIdioma, claveNivel, NIVEL_REAL } = require('./lib/idiomas');
 const ia        = require('./lib/ia');
 const iaP       = require('./lib/ia-prompts');
 const iaPerfil  = require('./lib/ia-perfil');
 const { iaMock } = require('./lib/ia-mock');
+const { arrancarDespierto } = require('./lib/despierto');
 
 // ── IDIOMA ACTIVO ────────────────────────────────────────
 // Desde el 27-sep-2026 la app entrena inglés Y francés. El contenido lleva una
@@ -875,7 +876,7 @@ app.get('/stats', async (req, res) => {
     // El nivel del test de ubicación del idioma, aparte del estimado por
     // destrezas: son dos medidas distintas y mezclarlas escondería de dónde
     // sale cada una. La cabecera usa éste cuando no hay destrezas medidas.
-    const claveTest = lang === 'fr' ? 'nivel_medido_fr' : 'nivel_medido';
+    const claveTest = claveNivel(lang);
     const nivelTest = (await leerConfig([claveTest]))[claveTest] || null;
 
     res.json({
@@ -1900,8 +1901,9 @@ app.post('/ia/conversacion', async (req, res) => {
       papel = textoDe(b.papel, 200) || 'La persona con la que el alumno tendría que hablar en esa situación.';
       if (!situacion) return res.status(400).json({ error: 'situacion_id o escenario requerido' });
     }
-    const c = await leerConfig([lang === 'fr' ? 'nivel_medido_fr' : 'nivel_medido']);
-    const nivel = c.nivel_medido_fr || c.nivel_medido || null;
+    const claveN = claveNivel(lang);
+    const c = await leerConfig([claveN]);
+    const nivel = NIVEL_REAL[lang] || c[claveN] || null;
     const turno = async () => {
       const r = await pedirIA({
         funcion: 'conversacion', lang,
@@ -2079,10 +2081,11 @@ async function resumenAlumno(lang) {
     q(`SELECT COALESCE(SUM(rondas), 0)::int AS rondas_7 FROM tetris_dias
         WHERE profile_id = $1 AND lang = $2 AND fecha >= ($3::date - 7)`, [PROFILE_ID, lang, hoy]),
   ]);
-  const c = await leerConfig([lang === 'fr' ? 'nivel_medido_fr' : 'nivel_medido']);
+  const claveN = claveNivel(lang);
+  const c = await leerConfig([claveN]);
   const lineas = [
     `Hoy: ${hoy}.`,
-    `Nivel medido con el test de la app: ${c.nivel_medido_fr || c.nivel_medido || 'sin medir'}.`,
+    `Nivel: ${NIVEL_REAL[lang] || c[claveN] || 'sin medir'}.`,
     `Días con estudio en las dos últimas semanas: ${dias.dias_14} (último: ${dias.ultimo || 'nunca'}).`,
     `Vocabulario: ${vocab.total} palabras, ${vocab.consolidadas} consolidadas (estabilidad ≥ 7 días), ${vocab.vencidas} pendientes de repaso hoy, ${vocab.de_errores} tarjetas salidas de sus errores.`,
     `Repaso en 7 días: ${repaso.repasos} repasos, ${repaso.fallos} fallos.`,
@@ -2300,7 +2303,7 @@ app.get('/sesion-diaria', async (req, res) => {
           WHERE rl.profile_id = $1 AND ${tetris.sqlDiaDeEstudio('rl.reviewed_at', '$2')} = $3::date
           ORDER BY rl.user_word_id, rl.reviewed_at DESC
        )
-       SELECT uw.id, uw.status, w.word, w.translation, w.example_sentence, w.level, w.category,
+       SELECT uw.id, uw.status, w.word, w.translation, w.example_sentence, w.level, w.category, w.audio_hint,
               TRUE AS repetida
          FROM ultimas u
          JOIN user_words uw ON uw.id = u.user_word_id
@@ -2312,7 +2315,7 @@ app.get('/sesion-diaria', async (req, res) => {
 
     // 1b. El resto, las que tocan por FSRS, hasta completar la meta del día.
     const { rows: nuevas } = await db(
-      `SELECT uw.id, uw.status, w.word, w.translation, w.example_sentence, w.level, w.category
+      `SELECT uw.id, uw.status, w.word, w.translation, w.example_sentence, w.level, w.category, w.audio_hint
          FROM user_words uw JOIN words w ON w.id = uw.word_id
         WHERE uw.profile_id = $1 AND uw.next_review_date <= $2 AND w.lang = $3
           AND NOT (uw.id = ANY($4::int[]))
@@ -2473,7 +2476,7 @@ app.get('/idioma', async (req, res) => {
   } catch (e) { fallo(res, e); }
 });
 
-// PUT /idioma — cambiar de idioma. body: { idioma: 'en' | 'fr' }
+// PUT /idioma — cambiar de idioma. body: { idioma: 'en' | 'fr' | 'de' }
 app.put('/idioma', async (req, res) => {
   const idioma = req.body?.idioma;
   if (!esIdioma(idioma)) return res.status(400).json({ error: 'Idioma no válido' });
@@ -3150,4 +3153,5 @@ app.listen(PORT, () => {
   // Las claves pueden venir de la base, así que se esperan antes de arrancar
   // los avisos. Sin base, prepararVapid lo registra y se sigue sin avisos.
   prepararVapid().then(arrancarPlanificador);
+  arrancarDespierto();
 });

@@ -87,7 +87,9 @@ function renderSesion() {
 function tramoPalabra() {
   const w = _sesData.palabras[_sesPaso];
   if (!w) return tramoFin();
-  const fig = (w.pron && typeof pronFrase === 'function') ? pronFrase(w.pron) : '';
+  // El alemán no tiene motor de figurada: la pronunciación va escrita en la palabra.
+  const fig = (w.pron && typeof pronFrase === 'function') ? pronFrase(w.pron)
+    : (w.audio_hint ? `<div class="ses-nota">${escaparHtml(w.audio_hint)}</div>` : '');
   // La sesión es por donde se entra a la app desde el aviso diario, así que es
   // donde más se ve la figurada. Sin leyenda aquí, la ə y la æ aparecían sin
   // que nada dijera cómo se leen.
@@ -256,7 +258,7 @@ function tramoFin() {
       <div class="ses-fin-ico"><img src="src/img/icons/done.png" alt="" class="ico"></div>
       <div class="ses-fin-tit">Hecho por hoy</div>
       <div class="ses-fin-sub">
-        ${_sesAciertos} ${_sesAciertos === 1 ? 'palabra' : 'palabras'}${_sesFrase ? (frances ? ' y una frase para Suiza' : ' y una frase de mostrador') : ''}.
+        ${_sesAciertos} ${_sesAciertos === 1 ? 'palabra' : 'palabras'}${_sesFrase ? (frances ? ' y una frase para Suiza' : ' y una frase de trabajo') : ''}.
       </div>
       ${racha ? `<div class="ses-fin-racha"><img src="src/img/icons/streak.png" alt="" class="ico"> Racha de ${racha} ${racha === 1 ? 'día' : 'días'}</div>` : ''}
       <div class="ses-fin-pie">

@@ -1,12 +1,63 @@
 // TutorIngles — plan.js
 // Plan de 30 días: muestra la lección de hoy en la pantalla HOY.
 
+// La entrevista de Forster's: se ve en HOY en cualquier idioma, porque el inglés
+// sigue siendo el idioma por defecto. Se quita sola pasada esta fecha.
+const ENTREVISTA_HASTA = '2026-11-12';
+const ENTREVISTA_ESCENA = {
+  lang: 'de', titulo: 'Entrevista con el Sr. Gleirscher', quien: 'Herr Gleirscher',
+  escenario: "Videollamada de WhatsApp para un puesto de friegaplatos de temporada en Forster's Naturresort (Neustift, Tirol). El alumno es el candidato y habla alemán de principiante.",
+  papel: 'Herr Gleirscher, dueño del hotel: amable y directo. Trata de Sie, frases muy cortas, una pregunta cada vez: experiencia, inicio, duración, fines de semana, y si tiene preguntas.',
+};
+
+function pintarEntrevistaHoy() {
+  const caja = document.getElementById('entrevista-hoy');
+  if (!caja) return;
+  const hoy = hoyLocal();
+  if (hoy > ENTREVISTA_HASTA) { caja.innerHTML = ''; return; }
+  caja.innerHTML = `
+    <div class="glass-card-accent" style="margin-bottom:8px">
+      <div class="card-title">TU ENTREVISTA · ALEMÁN</div>
+      <p style="font-size:0.8rem;color:var(--text-2);line-height:1.55;margin-bottom:10px">
+        Forster's Naturresort, friegaplatos. Practícala con la IA: te hace las preguntas y te corrige cada frase.
+      </p>
+      <button class="btn btn-subtle" onclick="abrirEntrevista()">PRACTICAR LA ENTREVISTA</button>
+    </div>`;
+}
+
+function abrirEntrevista() {
+  // Si ya hay una a medias se vuelve a ella: reabrirla pagaría otra apertura.
+  const est = typeof charlaEstado !== 'undefined' ? charlaEstado : null;
+  if (est && !est.terminado && est.escena.titulo === ENTREVISTA_ESCENA.titulo) return goTo('charla');
+  charlaAbrir(ENTREVISTA_ESCENA);
+}
+
 async function loadPlanToday() {
   const card = document.getElementById('plan-card');
   if (!card) return;
   // El plan de 30 días es del inglés (examen con fecha). El francés va por
   // fases sin calendario: ver lib/fases.js.
   if (typeof _idioma !== 'undefined' && _idioma === 'fr') return pintarFasesFrances(card);
+  // El alemán no tiene plan por días: va de la entrevista y del trabajo en el
+  // hotel, y lo que toca cada día lo dice la sesión.
+  if (typeof _idioma !== 'undefined' && _idioma === 'de') {
+    card.innerHTML = `
+      <div class="card-title">ALEMÁN PARA EL HOTEL</div>
+      <p style="font-size:0.8rem;color:var(--text-2);line-height:1.6">
+        Empiezas desde cero: TRABAJO tiene la entrevista y las primeras semanas en la cocina, y PALABRAS, lo que vas a oír.
+      </p>`;
+    return;
+  }
+  // El inglés ya no va al examen con fecha: va de conseguir trabajo fuera.
+  // El Cambridge sigue en Examen, sin plan por días.
+  if (typeof _idioma === 'undefined' || _idioma === 'en') {
+    card.innerHTML = `
+      <div class="card-title">INGLÉS PARA TRABAJAR</div>
+      <p style="font-size:0.8rem;color:var(--text-2);line-height:1.6">
+        De A2 a B1 con lo que vas a usar: entrevistas, cocina, hotel y fábrica. Empieza por EMPEZAR y sigue en TRABAJO.
+      </p>`;
+    return;
+  }
   try {
     const p = await apiGet('/curriculum/today');
     if (!p) return;

@@ -181,7 +181,7 @@ function iaDecirBoton(btn) {
 /** 'fr' → 'fr-FR'. Lo que no sea un idioma de la app va al idioma activo. */
 function iaVozDe(lang) {
   if (typeof IDIOMA_INFO !== 'undefined' && IDIOMA_INFO[lang]) return IDIOMA_INFO[lang].voz;
-  if (/^(en|fr)-/i.test(lang || '')) return lang;
+  if (/^(en|fr|de)-/i.test(lang || '')) return lang;
   return typeof idiomaVoz === 'function' ? idiomaVoz() : 'en-GB';
 }
 
@@ -418,14 +418,14 @@ async function iaDiagnosticarPron({ objetivo, alternativas = [], lang, caja, btn
  * «yo vudré» y la corrección no sirve de nada.
  */
 function iaHtmlPistaDictado(lang) {
-  const nombre = lang === 'fr' || /^fr/i.test(lang || '') ? 'francés' : 'inglés';
+  const nombre = /^fr/i.test(lang || '') ? 'francés' : /^de/i.test(lang || '') ? 'alemán' : 'inglés';
   // Un iPhone configurado en español suele tener sólo el teclado español: ahí
   // no hay globo, o el globo no lleva al francés. Hay que decir cómo añadirlo.
   return `<div class="field-pista">Pulsa el micro del teclado y habla. Para que te entienda, el teclado
     tiene que estar en ${nombre}: mantén pulsado el globo ${'\u{1F310}'} y elígelo.
     <details class="ia-pista-mas"><summary>¿No sale el ${nombre}?</summary>
       Añádelo una vez: Ajustes del iPhone › General › Teclado › Teclados › Añadir teclado nuevo ›
-      ${nombre === 'francés' ? 'Francés (Suiza) o Francés' : 'Inglés (Reino Unido)'}. Si no ves el micro en el teclado,
+      ${{ francés: 'Francés (Suiza) o Francés', alemán: 'Alemán (Alemania)' }[nombre] || 'Inglés (Reino Unido)'}. Si no ves el micro en el teclado,
       enciende «Activar dictado» en esa misma pantalla.
     </details></div>`;
 }
@@ -439,7 +439,7 @@ function iaHtmlDictadoPron(id, objetivo, lang) {
   return `<div class="ia-dictado" id="${id}" data-objetivo="${escaparAttr(objetivo)}" data-lang="${escaparAttr(lang)}">
     <div class="ia-dictado-fila">
       <input class="field-input" id="${id}-txt" type="text" autocomplete="off" autocapitalize="off"
-        spellcheck="false" lang="${lang === 'fr' ? 'fr' : 'en'}" placeholder="Díctala con el micro del teclado">
+        spellcheck="false" lang="${/^(fr|de)/i.test(lang || '') ? lang.slice(0, 2).toLowerCase() : 'en'}" placeholder="Díctala con el micro del teclado">
       <button class="btn btn-subtle btn-sm" onclick="iaDictadoPron('${id}', this)">CORREGIR CON IA</button>
     </div>
     ${iaHtmlPistaDictado(lang)}

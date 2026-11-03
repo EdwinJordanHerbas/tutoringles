@@ -41,6 +41,7 @@ function renderProgressDashboard(stats) {
   // En francés no hay simulacros ni fecha de examen todavía: la ruta es la del
   // DALF y la cuenta atrás no se enseña, en vez de contar hacia la del CAE.
   const frances    = stats.idioma === 'fr';
+  const aleman     = stats.idioma === 'de';
   const currentLvl = stats.estimated_level || 'A2';
   const currentIdx = levels.indexOf(currentLvl);
 
@@ -48,7 +49,7 @@ function renderProgressDashboard(stats) {
   // Sin fecha de examen no hay cuenta atrás. Antes se caía al 1-dic "por
   // defecto", y la pantalla contaba días hacia un examen que nadie tenía
   // puesto. Desde el 28-sep el Cambridge es un objetivo sin fecha.
-  const conFecha   = !frances && Boolean(stats.exam_date);
+  const conFecha   = !frances && !aleman && Boolean(stats.exam_date);
   const targetDate = stats.exam_date || '2026-12-01';
   const now        = new Date();
   const examDt     = new Date(targetDate);
@@ -98,7 +99,7 @@ function renderProgressDashboard(stats) {
     <!-- 1. ROADMAP A2→B1→B2→C1 ─────────────────────────── -->
     <div class="glass-card-accent anim-fade-in">
       <div class="card-title" style="text-align:center;margin-bottom:16px">
-        <img src="src/img/icons/trophy.png" alt="" class="ico"> ${frances ? 'FRANCÉS · DALF C1' : 'CAMBRIDGE CAE'} — RUTA DE APRENDIZAJE
+        <img src="src/img/icons/trophy.png" alt="" class="ico"> ${frances ? 'FRANCÉS · DALF C1' : aleman ? 'ALEMÁN' : 'INGLÉS'} — RUTA DE APRENDIZAJE
       </div>
       <div class="prg-roadmap">
         <div class="prg-roadmap-line">
@@ -429,8 +430,8 @@ function iaPrgLimpiarConsejo(r) {
 /** Nombre del tipo de error ('gramatica' → 'gramática'), o '' si no se conoce. */
 const iaPrgTipo = (t) => (typeof IA_TIPOS !== 'undefined' && Object.prototype.hasOwnProperty.call(IA_TIPOS, t) ? IA_TIPOS[t] : '');
 
-/** Sólo 'en' o 'fr': va a atributos `lang` y a la voz. */
-const iaPrgLang = (lang) => (lang === 'fr' ? 'fr' : 'en');
+/** Sólo 'en', 'fr' o 'de': va a atributos `lang` y a la voz. */
+const iaPrgLang = (lang) => (lang === 'fr' || lang === 'de' ? lang : 'en');
 
 // ── El consejo guardado en el móvil ──────────────────────
 // Clave `ia_consejo_<lang>` → { fecha (ISO), lang, datos }, con `datos` en la

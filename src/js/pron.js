@@ -227,8 +227,8 @@ async function initPron() {
   _pronInited = true;
 
   // Todo lo de este fichero —figurada, pares mínimos, trampas— es del inglés.
-  // Con el francés activo, SONIDOS enseña los sonidos del francés (sons.js).
-  if (typeof _idioma !== 'undefined' && _idioma === 'fr' && typeof initSons === 'function') {
+  // Con el francés o el alemán activo, SONIDOS enseña los suyos (sons.js).
+  if (typeof _idioma !== 'undefined' && (_idioma === 'fr' || _idioma === 'de') && typeof initSons === 'function') {
     return initSons();
   }
 

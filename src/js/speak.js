@@ -38,9 +38,27 @@ const SPEAKING_PHRASES_FR = [
   { phrase: "Pour conclure, je dirais que les avantages l'emportent largement sur les inconvénients.", level: "C1", topic: "Exposé" },
 ];
 
+// Las del alemán: lo que hace falta para una entrevista y una cocina, nada más.
+const SPEAKING_PHRASES_DE = [
+  { phrase: 'Ich heiße Edwin und komme aus Spanien.', level: 'A2', topic: 'Vorstellung' },
+  { phrase: 'Ich kann sofort anfangen.', level: 'A2', topic: 'Vorstellung' },
+  { phrase: 'Ich arbeite seit fünf Jahren in zwei Restaurants.', level: 'A2', topic: 'Erfahrung' },
+  { phrase: 'Ich spüle Geschirr und putze die Küche.', level: 'A2', topic: 'Erfahrung' },
+  { phrase: 'Ich lerne Deutsch, aber ich bin noch Anfänger.', level: 'A2', topic: 'Deutsch' },
+  { phrase: 'Können Sie das bitte wiederholen?', level: 'A2', topic: 'Rettung' },
+  { phrase: 'Das habe ich nicht verstanden.', level: 'A2', topic: 'Rettung' },
+  { phrase: 'Gibt es ein Zimmer für Mitarbeiter?', level: 'A2', topic: 'Fragen' },
+  { phrase: 'Ist das Essen inklusive?', level: 'A2', topic: 'Fragen' },
+  { phrase: 'Bekomme ich den Vertrag vor der Reise?', level: 'A2', topic: 'Fragen' },
+  { phrase: 'Wo soll ich die Teller hinstellen?', level: 'A2', topic: 'Küche' },
+  { phrase: 'Ich bin fertig. Was soll ich jetzt machen?', level: 'A2', topic: 'Küche' },
+];
+
 /** El banco de frases del idioma que se está estudiando. */
-const frasesDelIdioma = () =>
-  (typeof _idioma !== 'undefined' && _idioma === 'fr') ? SPEAKING_PHRASES_FR : SPEAKING_PHRASES;
+const frasesDelIdioma = () => {
+  const l = typeof _idioma !== 'undefined' ? _idioma : 'en';
+  return l === 'fr' ? SPEAKING_PHRASES_FR : l === 'de' ? SPEAKING_PHRASES_DE : SPEAKING_PHRASES;
+};
 
 // ── STATE ───────────────────────────────────────────────
 let _currentPhrase = null;
@@ -63,8 +81,11 @@ let iaSpeakDictado = '';
 // ¿Soporta el navegador reconocimiento de voz? (Chrome/Edge/Android sí; iOS Safari limitado)
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-/** El idioma de la frase del día como lo piden las rutas /ia/*: 'en' | 'fr'. */
-const iaSpeakLang = () => (frasesDelIdioma() === SPEAKING_PHRASES_FR ? 'fr' : 'en');
+/** El idioma de la frase del día como lo piden las rutas /ia/*: 'en' | 'fr' | 'de'. */
+const iaSpeakLang = () => {
+  const banco = frasesDelIdioma();
+  return banco === SPEAKING_PHRASES_FR ? 'fr' : banco === SPEAKING_PHRASES_DE ? 'de' : 'en';
+};
 
 // ── INIT ─────────────────────────────────────────────────
 // `forzar` lo usa el botón de VOLVER de una tarea del oral: esa tarea ha pintado
@@ -80,6 +101,7 @@ function renderSpeakSection() {
   const container = document.getElementById('speak-content');
   const banco     = frasesDelIdioma();
   const frances   = banco === SPEAKING_PHRASES_FR;
+  const aleman    = banco === SPEAKING_PHRASES_DE;
   _currentPhrase  = banco[Math.floor(Math.random() * banco.length)];
   // Frase nueva, intento nuevo: lo de la anterior no puede acabar guardado (o
   // marcando HABLAR) con ésta.
@@ -131,7 +153,9 @@ function renderSpeakSection() {
     <div class="glass-card" style="margin-top:8px">
       <div class="card-title">CONVERSAR</div>
       <div style="font-size:0.78rem;color:var(--text-2);line-height:1.6;margin-bottom:12px">
-        ${frances
+        ${aleman
+          ? 'Practica la entrevista y la cocina del hotel. La IA te contesta en alemán muy sencillo y te corrige lo que digas.'
+          : frances
           ? 'Practica la panadería, la estación, la régie… antes de llegar. La IA hace de la otra persona, te contesta en francés y te corrige lo que digas.'
           : 'Practica una conversación de tu trabajo o del día a día. La IA hace de la otra persona, te contesta y te corrige lo que digas.'}
       </div>
@@ -146,7 +170,7 @@ function renderSpeakSection() {
          filas desde julio. Su sitio es éste, que es la pestaña de hablar.
          El servidor da las del idioma activo: en francés, las de hablar de
          ti (B1) y el exposé y el debate del DALF. -->
-    <div class="glass-card-accent" style="margin-top:8px">
+    <div class="glass-card-accent" style="margin-top:8px;${aleman ? 'display:none' : ''}">
       <div class="card-title">${frances ? 'EL ORAL EN FRANCÉS' : 'LAS 4 PARTES DEL ORAL · C1'}</div>
       <p style="font-size:0.72rem;color:var(--text-3);margin-bottom:10px">
         ${frances
@@ -156,7 +180,7 @@ function renderSpeakSection() {
       <div id="speaking-tasks"><div class="empty-state" style="padding:8px 0"><div class="spinner"></div></div></div>
     </div>
 
-    <div class="glass-card" style="margin-top:8px;${frances ? 'display:none' : ''}">
+    <div class="glass-card" style="margin-top:8px;${frances || aleman ? 'display:none' : ''}">
       <div class="card-title">TIPS CAMBRIDGE CAE</div>
       <div style="font-size:0.78rem;color:var(--text-2);line-height:1.7">
         • Usa <strong>discourse markers</strong>: "Nevertheless", "On the other hand", "In spite of"<br>
@@ -177,7 +201,7 @@ function renderSpeakSection() {
   // Vive en writing.js (comparte pantalla con las tareas escritas del C1).
   if (typeof loadSpeakingTasks === 'function') loadSpeakingTasks();
   // La figurada es del inglés.
-  if (!frances) cargarPronFrase();
+  if (!frances && !aleman) cargarPronFrase();
 }
 
 /**

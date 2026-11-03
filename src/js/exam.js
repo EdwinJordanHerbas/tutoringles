@@ -49,6 +49,11 @@ function renderExamDashboard() {
   const container = document.getElementById('exam-content');
   // Con el francés activo, este panel es el del DALF y no el del Cambridge.
   if (typeof _idioma !== 'undefined' && _idioma === 'fr') return renderExamDashboardFr();
+  // El alemán no tiene examen: que no enseñe el panel del Cambridge.
+  if (typeof _idioma !== 'undefined' && _idioma === 'de') {
+    container.innerHTML = '<div class="glass-card"><div class="card-title">SIN EXAMEN</div><p style="font-size:0.8rem;color:var(--text-2);line-height:1.6">En alemán no hay simulacros: el objetivo es trabajar en un hotel. Practica en TRABAJO y en CONVERSAR.</p></div>';
+    return;
+  }
 
   // Calcular promedio por sección
   const avgBySection = {};

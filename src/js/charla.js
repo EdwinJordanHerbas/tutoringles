@@ -118,7 +118,76 @@ const CHARLA_ESCENARIOS = {
   ],
   // En inglés, el mostrador de Sprinter: el alumno es el dependiente y la IA
   // hace del cliente.
+  // Alemán: la entrevista primero, y frases muy cortas (empieza desde cero).
+  de: [
+    {
+      grupo: 'entrevista',
+      titulo: 'Entrevista con el Sr. Gleirscher', lugar: 'WHATSAPP · FORSTER\'S NATURRESORT', quien: 'Herr Gleirscher',
+      escenario: "Videollamada de WhatsApp para un puesto de friegaplatos de temporada en Forster's Naturresort (Neustift, Tirol). El alumno es el candidato y habla alemán de principiante.",
+      papel: 'Herr Gleirscher, dueño del hotel: amable y directo. Trata de Sie, frases muy cortas, una pregunta cada vez: experiencia, inicio, duración, fines de semana, y si tiene preguntas.',
+    },
+    {
+      grupo: 'entrevista',
+      titulo: 'Preguntar por las condiciones', lugar: 'HABITACIÓN · COMIDA · CONTRATO', quien: 'Herr Gleirscher',
+      escenario: 'Final de la entrevista de friegaplatos en un hotel del Tirol. El alumno pregunta por habitación, comida, sueldo neto, horas, días libres y si recibe el contrato antes de viajar.',
+      papel: 'Herr Gleirscher, dueño del hotel. Trata de Sie, responde con frases muy cortas a cada pregunta, con datos inventados para practicar, y espera a que el alumno pregunte lo siguiente.',
+    },
+    {
+      grupo: 'entrevista',
+      titulo: 'No entiendo nada', lugar: 'PEDIR QUE REPITA', quien: 'Herr Gleirscher',
+      escenario: 'Entrevista por teléfono en un hotel austriaco. El jefe habla demasiado rápido y el alumno, principiante, entrena a pedir que repita, que hable despacio o a pasar al inglés.',
+      papel: 'Jefe de hotel austriaco, simpático, habla de corrido y con frases algo largas. Cuando el alumno le pide repetir o ir despacio, lo hace más sencillo. Si pide inglés, sigue en alemán fácil.',
+    },
+    {
+      grupo: 'trabajo',
+      titulo: 'Tu primer día en la cocina', lugar: 'KÜCHE · ERSTER TAG', quien: 'Der Küchenchef',
+      escenario: 'Primer día como friegaplatos en un hotel del Tirol. El jefe de cocina te enseña dónde va todo y te da órdenes sencillas.',
+      papel: 'Jefe de cocina austriaco, con prisa pero buena persona. Tutea al alumno. Órdenes muy cortas: dónde va cada cosa, qué limpiar, a qué hora empieza la pausa.',
+    },
+    {
+      grupo: 'trabajo',
+      titulo: 'Horarios con un compañero', lugar: 'PERSONALRAUM · DIENSTPLAN', quien: 'Ein Kollege',
+      escenario: 'En la sala de personal del hotel. Un compañero te explica el cuadrante, los días libres y la comida del personal.',
+      papel: 'Compañero de cocina, joven y amable. Tutea al alumno. Frases muy cortas sobre turnos, días libres y comida; pregunta de dónde viene.',
+    },
+  ],
   en: [
+    {
+      grupo: 'entrevista',
+      titulo: 'Llamada de una agencia en Noruega', lugar: 'PHONE · SALMON FACTORY', quien: 'The recruiter',
+      escenario: 'A Norwegian agency calls the student about a production job in a salmon factory. He is Spanish, has no fish experience, wants a room and can travel when he has a contract.',
+      papel: 'Friendly recruiter who speaks clear, simple English. One question at a time: experience, start date, night shifts, working in the cold, accommodation.',
+    },
+    {
+      grupo: 'entrevista',
+      titulo: 'Entrevista en un hotel de Irlanda', lugar: 'VIDEO CALL · FOOD AND BEVERAGE', quien: 'The manager',
+      escenario: 'Video interview for a food and beverage job at a hotel in Ireland. The student has worked in his family restaurants in Seville since 2021.',
+      papel: 'Hotel manager, warm and direct. Short questions about experience, customers, weekends and start date, then asks if he has questions about staff accommodation.',
+    },
+    {
+      grupo: 'entrevista',
+      titulo: 'Preguntar por las condiciones', lugar: 'ROOM · PAY · CONTRACT', quien: 'The recruiter',
+      escenario: 'End of a job interview. The student asks about the room, meals, net pay, hours, days off and whether he gets the contract before he travels.',
+      papel: 'Recruiter. Answers each question with simple sentences and practice details, then waits for the next question.',
+    },
+    {
+      grupo: 'trabajo',
+      titulo: 'Primer turno en la cocina', lugar: 'HOTEL KITCHEN', quien: 'The head chef',
+      escenario: 'First shift as a dishwasher and kitchen assistant in a hotel. The head chef shows the student what to do.',
+      papel: 'Busy but kind head chef. Short orders in simple English: where things go, what to clean, when the break is.',
+    },
+    {
+      grupo: 'trabajo',
+      titulo: 'Limpiar habitaciones', lugar: 'HOUSEKEEPING', quien: 'The supervisor',
+      escenario: 'First day in hotel housekeeping. The supervisor explains how to clean a room and what to do when a guest is inside.',
+      papel: 'Housekeeping supervisor, patient. Simple English, one instruction at a time, and she checks that the student has understood.',
+    },
+    {
+      grupo: 'trabajo',
+      titulo: 'Primer día en la fábrica', lugar: 'SALMON FACTORY · SAFETY', quien: 'The team leader',
+      escenario: 'First day on the production line of a salmon factory. The team leader explains safety, hygiene rules and the line.',
+      papel: 'Team leader, Norwegian, clear and calm English. Explains gloves, knives, the cold and breaks, and asks the student to repeat the key rules.',
+    },
     {
       titulo: 'Un cliente busca zapatillas', lugar: 'SHOP FLOOR · RUNNING', quien: 'Customer',
       escenario: 'Sección de zapatillas de una tienda de deportes (Sprinter). Un cliente británico busca zapatillas para correr; el alumno es el dependiente y le atiende.',
@@ -182,7 +251,7 @@ function charlaAbrir(opts) {
     escena = {
       situacion_id: /^\d+$/.test(String(o.situacion_id)) ? Number(o.situacion_id) : o.situacion_id,
       titulo: String(o.titulo || 'Situación'),
-      quien: String(o.quien || (lang === 'en' ? 'Customer' : 'Interlocuteur')),
+      quien: String(o.quien || { en: 'Customer', fr: 'Interlocuteur', de: 'Gegenüber' }[lang]),
       lang,
     };
   } else if (String(o.escenario || '').trim()) {
@@ -246,8 +315,9 @@ function charlaNuevaEscena(escena) {
 /** 'fr', 'fr-FR' → 'fr'. Lo que no sea un idioma de la app, al activo. */
 function charlaLang(l) {
   if (/^fr/i.test(l || '')) return 'fr';
+  if (/^de/i.test(l || '')) return 'de';
   if (/^en/i.test(l || '')) return 'en';
-  return typeof _idioma !== 'undefined' && (_idioma === 'fr' || _idioma === 'en') ? _idioma : 'en';
+  return typeof _idioma !== 'undefined' && ['en', 'fr', 'de'].includes(_idioma) ? _idioma : 'en';
 }
 
 const charlaNombreIdioma = (lang) => (typeof IDIOMA_INFO !== 'undefined' && IDIOMA_INFO[lang]?.nombre) || lang;
@@ -266,6 +336,19 @@ const charlaPlural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
 
 /** Los grupos de escenas del selector, en orden. El índice de cada escena sigue siendo el de CHARLA_ESCENARIOS. */
 function charlaGrupos(lang) {
+  if (lang === 'de') {
+    return [
+      { id: 'entrevista', tit: 'Tu entrevista', sub: 'Claude es el jefe del hotel. Los datos del puesto son de práctica.' },
+      { id: 'trabajo', tit: 'En la cocina del hotel', sub: 'Lo que vas a oír la primera semana.' },
+    ];
+  }
+  if (lang === 'en') {
+    return [
+      { id: 'entrevista', tit: 'Entrevistas', sub: 'Llamadas de agencias y hoteles. Los datos del puesto son de práctica.' },
+      { id: 'trabajo', tit: 'En el trabajo', sub: 'Hotel, cocina y fábrica: lo que te dirán el primer día.' },
+      { id: 'llegar', tit: 'En la tienda', sub: 'Tú eres el dependiente; Claude, el cliente.' },
+    ];
+  }
   return lang === 'fr'
     ? [
       { id: 'trabajo', tit: 'En el trabajo: atiendes tú', sub: 'Tú eres el empleado; Claude, el cliente. Vender ya sabes: aquí se entrena hacerlo en francés.' },
@@ -312,12 +395,12 @@ function charlaPintarSelector() {
         <textarea class="field-input" id="charla-m-sit" rows="2" maxlength="300" autocomplete="off"
           placeholder="${lang === 'fr'
             ? 'Ej.: en la lavandería del edificio, una vecina dice que hoy le toca a ella'
-            : 'Ej.: un cliente pregunta si la tienda envía a domicilio'}"></textarea>
+            : 'Ej.: el jefe de cocina te pide limpiar algo y no entiendes qué'}"></textarea>
       </div>
       <div class="field">
         <label for="charla-m-papel">Con quién hablas</label>
         <input class="field-input" id="charla-m-papel" type="text" maxlength="200" autocomplete="off"
-          placeholder="${lang === 'fr' ? 'Ej.: una vecina mayor, amable pero muy suya' : 'Ej.: un cliente con prisa'}">
+          placeholder="${lang === 'fr' ? 'Ej.: una vecina mayor, amable pero muy suya' : 'Ej.: un jefe de cocina con prisa'}">
       </div>
       <button class="btn btn-subtle" onclick="charlaEmpezarMedida()">EMPEZAR</button>
     </div>`;
@@ -808,7 +891,7 @@ async function charlaPedir() {
   est.esperando = false;
   est.pendiente = null;
   // En una situación del sector el idioma lo decide la situación.
-  if (r.lang === 'en' || r.lang === 'fr') est.escena.lang = r.lang;
+  if (['en', 'fr', 'de'].includes(r.lang)) est.escena.lang = r.lang;
 
   if (mensaje) {
     const yo = est.turnos[est.turnos.length - 1];

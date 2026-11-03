@@ -48,15 +48,14 @@ function wkSpeak(text, btn, id) {
 // situation_lines guarda el texto en el idioma del sector, y en la Suiza
 // romanda es francés. Micrófono y voz tienen que ir con él.
 function wkVoz() {
-  return _wkCurrent?.lang === 'fr' ? 'fr-FR'
-       : _wkCurrent?.lang === 'en' ? 'en-GB'
-       : (typeof idiomaVoz === 'function' ? idiomaVoz() : 'en-GB');
+  if (typeof IDIOMA_INFO !== 'undefined' && IDIOMA_INFO[_wkCurrent?.lang]) return IDIOMA_INFO[_wkCurrent.lang].voz;
+  return typeof idiomaVoz === 'function' ? idiomaVoz() : 'en-GB';
 }
 
 // El idioma de la situación como lo piden las rutas /ia/*: el código corto
 // ('en' | 'fr'), no la etiqueta de voz de wkVoz().
 function iaWkLang() {
-  if (_wkCurrent?.lang === 'fr' || _wkCurrent?.lang === 'en') return _wkCurrent.lang;
+  if (typeof IDIOMA_INFO !== 'undefined' && IDIOMA_INFO[_wkCurrent?.lang]) return _wkCurrent.lang;
   return typeof _idioma !== 'undefined' && _idioma ? _idioma : 'en';
 }
 
@@ -195,7 +194,7 @@ function renderSituation() {
            conversación), y los chips cambian de panel sin moverse de aquí. -->
       <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--surface-2)">
         <div style="font-size:0.7rem;color:var(--text-3);line-height:1.45">
-          Improvísala: la IA hace de ${iaWkLang() === 'fr' ? 'la otra persona' : 'cliente'}, te contesta y te corrige.
+          Improvísala: la IA hace de la otra persona, te contesta y te corrige.
         </div>
         <div class="ia-acciones" style="margin-top:8px">
           <button class="btn btn-subtle btn-sm" onclick="iaWkConversar()">${ico('speak', 14)} CONVERSAR CON IA</button>
@@ -498,7 +497,7 @@ function renderRoleplay() {
                         background:${t.kind === 'you' ? 'var(--accent-dim)' : 'var(--surface-2)'};
                         ${i === _wkTurn ? 'outline:1px solid var(--accent)' : ''}">
               <div style="font-size:0.58rem;font-family:var(--font-mono);color:var(--text-4);letter-spacing:1px;margin-bottom:3px">
-                ${t.kind === 'you' ? 'TÚ' : (_wkCurrent?.lang === 'fr' ? 'INTERLOCUTOR' : 'CLIENTE')}
+                ${t.kind === 'you' ? 'TÚ' : 'LA OTRA PERSONA'}
               </div>
               <div style="font-size:0.85rem;color:var(--text);line-height:1.35">${escaparHtml(t.en)}</div>
               ${i === _wkTurn ? wkPron(t) : ''}

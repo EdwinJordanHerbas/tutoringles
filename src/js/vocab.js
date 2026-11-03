@@ -265,8 +265,8 @@ function showAddWordForm() {
     <div class="glass-card anim-slide-up">
       <div class="card-title">AÑADIR PALABRA</div>
       <div class="field">
-        <label>Palabra (${typeof _idioma !== 'undefined' && _idioma === 'fr' ? 'FR' : 'EN'})</label>
-        <input class="field-input" id="add-word"    placeholder="${typeof _idioma !== 'undefined' && _idioma === 'fr' ? 'p. ej. se débrouiller' : 'e.g. endeavour'}">
+        <label>Palabra (${(typeof _idioma !== 'undefined' ? _idioma : 'en').toUpperCase()})</label>
+        <input class="field-input" id="add-word"    placeholder="${{ fr: 'p. ej. se débrouiller', de: 'p. ej. der Teller' }[typeof _idioma !== 'undefined' ? _idioma : 'en'] || 'e.g. endeavour'}">
       </div>
       <div class="field">
         <label>Traducción (ES)</label>
@@ -274,7 +274,7 @@ function showAddWordForm() {
       </div>
       <div class="field">
         <label>Ejemplo</label>
-        <input class="field-input" id="add-example" placeholder="Frase de ejemplo en ${typeof _idioma !== 'undefined' && _idioma === 'fr' ? 'francés' : 'inglés'}">
+        <input class="field-input" id="add-example" placeholder="Frase de ejemplo en ${typeof IDIOMA_INFO !== 'undefined' ? IDIOMA_INFO[_idioma].nombre : 'inglés'}">
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="field">

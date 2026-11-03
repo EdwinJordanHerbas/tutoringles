@@ -43,6 +43,10 @@ const VOZ_PREMIO = [
 // fr-CA puntúa por debajo del fr-FR aunque la voz sea buena. Ariane y Fabrice
 // son las voces neuronales suizas de Microsoft (fr-CH): si el aparato las
 // tiene, son las mejores posibles para lo que viene.
+const VOZ_PREMIO_DE = [
+  [/\b(katja|conrad|amala|florian|seraphina|killian|ingrid|jonas)\b/i, 40],   // Microsoft de-DE y de-AT
+  [/\b(anna|petra|markus|viktor|helena|klaus|sandy|shelley)\b/i,  35],         // iOS y macOS
+];
 const VOZ_PREMIO_FR = [
   [/neural|natural|premium|enhanced|wavenet/i, 60],
   [/\b(ariane|fabrice)\b/i,                         55],  // Microsoft fr-CH
@@ -55,10 +59,11 @@ const VOZ_PREMIO_FR = [
 const VOZ_VARIANTE = {
   en: [[/^en-GB/i, 30]],
   fr: [[/^fr-CH/i, 35], [/^fr-FR/i, 30], [/^fr-BE/i, 15], [/^fr-CA/i, 0]],
+  de: [[/^de-AT/i, 35], [/^de-DE/i, 30], [/^de-CH/i, 10]],
 };
 
 /** 'fr-FR' → 'fr'. Lo que no se reconozca, inglés. */
-const vozBase = (lang) => (/^fr/i.test(lang || '') ? 'fr' : 'en');
+const vozBase = (lang) => (/^fr/i.test(lang || '') ? 'fr' : /^de/i.test(lang || '') ? 'de' : 'en');
 
 /** La etiqueta del idioma activo, si app.js ya la tiene. */
 const vozLangActivo = () => (typeof idiomaVoz === 'function' ? idiomaVoz() : 'en-GB');
@@ -81,7 +86,7 @@ const _vozAvisada = {};
 // buena que sea la heurística, el que oye el resultado es el usuario, y en
 // iPhone conviven voces que suenan muy distinto con nombres casi iguales.
 // La del inglés conserva la clave de siempre para no perder la que ya había.
-const VOZ_GUARDADA = { en: 'voz_preferida', fr: 'voz_preferida_fr' };
+const VOZ_GUARDADA = { en: 'voz_preferida', fr: 'voz_preferida_fr', de: 'voz_preferida_de' };
 
 const vozGuardada = (base) => {
   try { return localStorage.getItem(VOZ_GUARDADA[base]); } catch { return null; }
@@ -115,7 +120,7 @@ function puntuarVoz(v, base = 'en') {
   let p = 0;
   for (const [re, v2] of VOZ_VARIANTE[base] || []) if (re.test(lang)) { p += v2; break; }
   const n = `${v.name || ''} ${v.voiceURI || ''}`;
-  for (const [re, v2] of (base === 'fr' ? VOZ_PREMIO_FR : VOZ_PREMIO)) if (re.test(n)) { p += v2; break; }
+  for (const [re, v2] of (base === 'fr' ? VOZ_PREMIO_FR : base === 'de' ? VOZ_PREMIO_DE : VOZ_PREMIO)) if (re.test(n)) { p += v2; break; }
   for (const [re, v2] of VOZ_CASTIGO) if (re.test(n)) p += v2;
   return p;
 }
@@ -297,7 +302,7 @@ function vozDecir(texto, opciones = {}) {
   if (!voz && !hayVozDe(lang) && !_vozAvisada[base]) {
     _vozAvisada[base] = true;
     if (typeof toast === 'function') {
-      toast(`Tu móvil no tiene voz ${base === 'fr' ? 'francesa' : 'inglesa'} instalada: sonará raro`, 'error');
+      toast(`Tu móvil no tiene voz ${{ fr: 'francesa', de: 'alemana' }[base] || 'inglesa'} instalada: sonará raro`, 'error');
     }
   }
 

@@ -61,7 +61,7 @@ test('los datos exigen autenticación', async (t) => {
 // habla: sin `?lang=`, el resultado dependía de si se había dejado la app en
 // inglés o en francés.
 test('las tareas de Reading y Listening nunca exponen la respuesta correcta', conAuth, async () => {
-  for (const lang of ['en', 'fr']) {
+  for (const lang of ['en', 'fr', 'de']) {
     const textos = await (await get(`/reading/tasks?lang=${lang}`)).json();
     const audios = await (await get(`/listening/tasks?lang=${lang}`)).json();
     if (lang === 'en') assert.ok(textos.length && audios.length, 'debería haber Reading y Listening del Cambridge');
@@ -117,7 +117,7 @@ test('el corrector de repaso rechaza un grado fuera de rango', conAuth, async ()
 // (POST /tetris/noche) haría el sorteo de verdad para ese día.
 
 test('cada idioma sólo devuelve sus palabras', conAuth, async () => {
-  for (const lang of ['en', 'fr']) {
+  for (const lang of ['en', 'fr', 'de']) {
     const ws = await (await get(`/words?lang=${lang}`)).json();
     assert.ok(Array.isArray(ws));
     const ajenas = ws.filter((w) => w.lang !== lang);
@@ -172,7 +172,7 @@ test('/ia/estado dice si hay IA sin enseñar la clave', conAuth, async (t) => {
 
 test('/ia/perfil va por idioma', conAuth, async (t) => {
   if (!(await servidorVivo())) return t.skip(`sin servidor en ${URL}`);
-  for (const lang of ['en', 'fr']) {
+  for (const lang of ['en', 'fr', 'de']) {
     const r = await get(`/ia/perfil?lang=${lang}`);
     assert.strictEqual(r.status, 200);
     const j = await r.json();

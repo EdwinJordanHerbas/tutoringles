@@ -31,18 +31,19 @@ async function initSettings() {
 function renderSettings2(s) {
   const container = document.getElementById('settings-content');
   const levels = ['A2', 'B1', 'B2', 'C1'];
-  const frances = typeof _idioma !== 'undefined' && _idioma === 'fr';
+  const lenguaActiva = typeof IDIOMA_INFO !== 'undefined' ? IDIOMA_INFO[_idioma] : { nombre: 'inglés' };
+  const lenguaOtra = typeof idiomaSiguiente === 'function' ? IDIOMA_INFO[idiomaSiguiente()] : { cabecera: 'FRANCÉS' };
   container.innerHTML = `
     ${typeof renderAvisos === 'function' ? renderAvisos() : ''}
 
     <div class="glass-card" style="margin-top:8px">
       <div class="card-title">IDIOMA</div>
       <p style="font-size:0.78rem;color:var(--text-2);margin-bottom:12px">
-        Estás estudiando <b>${frances ? 'francés' : 'inglés'}</b>. Las palabras, las situaciones,
+        Estás estudiando <b>${lenguaActiva.nombre}</b>. Las palabras, las situaciones,
         la gramática y la sesión de cinco minutos son las de ese idioma; el progreso
         de cada uno se guarda aparte.
       </p>
-      <button class="btn btn-subtle" onclick="cambiarIdioma()">PASAR A ${frances ? 'INGLÉS' : 'FRANCÉS'}</button>
+      <button class="btn btn-subtle" onclick="cambiarIdioma()">PASAR A ${lenguaOtra.cabecera}</button>
     </div>
 
     ${typeof iaHtmlAjustesHueco === 'function' ? iaHtmlAjustesHueco() : ''}
@@ -103,8 +104,8 @@ function renderVozAjustes() {
   const voces  = vozListar();
   const actual = typeof mejorVoz === 'function' ? mejorVoz() : null;
   // Una voz por idioma: aquí se elige la del que se está estudiando.
-  const lengua = typeof _idioma !== 'undefined' && _idioma === 'fr' ? 'francés' : 'inglés';
-  const adj    = lengua === 'francés' ? 'francesa' : 'inglesa';
+  const lengua = typeof IDIOMA_INFO !== 'undefined' ? IDIOMA_INFO[_idioma].nombre : 'inglés';
+  const adj    = { francés: 'francesa', alemán: 'alemana' }[lengua] || 'inglesa';
 
   if (!voces.length) {
     return `
@@ -146,10 +147,11 @@ function cambiarVoz(voiceURI) {
 }
 
 function probarVoz(btn) {
-  const frances = typeof _idioma !== 'undefined' && _idioma === 'fr';
-  vozDecir(frances
-    ? 'Bonjour ! Vous cherchez une pointure en particulier ? Ça fait septante-neuf francs.'
-    : 'Would you like to try them on? Here is your receipt.', { btn });
+  const frases = {
+    fr: 'Bonjour ! Vous cherchez une pointure en particulier ? Ça fait septante-neuf francs.',
+    de: 'Grüß Gott! Ich spüle das Geschirr und putze die Küche.',
+  };
+  vozDecir(frases[typeof _idioma !== 'undefined' ? _idioma : 'en'] || 'Would you like to try them on? Here is your receipt.', { btn });
 }
 
 async function saveSettings() {

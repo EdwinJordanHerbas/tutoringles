@@ -52,7 +52,11 @@ const IDIOMA_KEY = 'ti_idioma';
 const IDIOMA_INFO = {
   en: { nombre: 'inglés',  cabecera: 'INGLÉS',  voz: 'en-GB', examen: 'Cambridge C1' },
   fr: { nombre: 'francés', cabecera: 'FRANCÉS', voz: 'fr-FR', examen: 'DALF C1' },
+  de: { nombre: 'alemán',  cabecera: 'ALEMÁN',  voz: 'de-DE', examen: '' },
 };
+// El orden en el que el chip de la cabecera pasa de un idioma a otro.
+const IDIOMA_CICLO = ['en', 'de', 'fr'];
+const idiomaSiguiente = (l = _idioma) => IDIOMA_CICLO[(IDIOMA_CICLO.indexOf(l) + 1) % IDIOMA_CICLO.length];
 let _idioma = (() => {
   try { const g = localStorage.getItem(IDIOMA_KEY); return IDIOMA_INFO[g] ? g : 'en'; }
   catch { return 'en'; }
@@ -94,7 +98,7 @@ function pintarIdioma() {
  * recarga tarda lo mismo que abrir la app.
  */
 async function cambiarIdioma() {
-  const otro = _idioma === 'fr' ? 'en' : 'fr';
+  const otro = idiomaSiguiente();
   try {
     await apiPut('/idioma', { idioma: otro });
     try { localStorage.setItem(IDIOMA_KEY, otro); } catch {}
@@ -672,6 +676,7 @@ async function loadHoyData() {
   }
 
   // Plan de 30 días
+  if (typeof pintarEntrevistaHoy === 'function') pintarEntrevistaHoy();
   if (typeof loadPlanToday === 'function') loadPlanToday();
 
   // Racha semanal (últimos 7 días pintados)
@@ -741,10 +746,13 @@ function renderEscribir() {
   // dos tipos, y se dice cuál es cuál: los correos que hacen falta en cuanto se
   // llega a Suiza, y el formato del DALF C1, que es la fase 3.
   const frances = _idioma === 'fr';
+  const aleman  = _idioma === 'de';
   const tit = document.getElementById('escribir-tit');
   const sub = document.getElementById('escribir-sub');
-  if (tit) tit.textContent = frances ? 'ESCRIBIR EN FRANCÉS' : 'LAS TAREAS DEL C1';
-  if (sub) sub.textContent = frances
+  if (tit) tit.textContent = frances ? 'ESCRIBIR EN FRANCÉS' : aleman ? 'ESCRIBIR EN ALEMÁN' : 'LAS TAREAS DEL C1';
+  if (sub) sub.textContent = aleman
+    ? 'Todavía no hay tareas de alemán. Para practicar frases, usa CONVERSAR y escribe tus respuestas.'
+    : frances
     ? 'Primero los correos de tu primer mes en Suiza (B1); al final, la síntesis y el ensayo del DALF C1. Te puntúas tú con los criterios del DALF.'
     : 'Escribes tú y te puntúas con la rúbrica oficial de Cambridge.';
   const aviso = document.getElementById('escribir-aviso');

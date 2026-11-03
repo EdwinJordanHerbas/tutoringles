@@ -15,24 +15,42 @@
 # pistas en el móvil y las manda cuando puede (reintenta si Render dormía).
 # Un aviso puesto fuera de esa franja no sale.
 #
-# El cron de GitHub no es puntual (puede retrasarse bastante en horas de
-# carga); por eso va cada 10 minutos y no cada 14. GitHub apaga los cron de un
-# repo sin commits en 60 días.
+# El cron de GitHub no es puntual: en nov-2026 corría cada varias horas en vez
+# de cada 10 minutos. Por eso, desde el 3-nov-2026, la app se llama a sí misma
+# durante el día (lib/despierto.js) y este fichero sólo tiene que despertarla.
+# La parte delicada es la mañana: la ejecución de medianoche espera dormida
+# hasta las 05:00 UTC, y así llega a tiempo aunque GitHub la lance tarde.
+# GitHub apaga los cron de un repo sin commits en 60 días.
 
 name: despierta
 
 on:
   schedule:
     - cron: '*/10 5-22 * * *'
+    - cron: '0 0 * * *'
   workflow_dispatch:
 
 permissions: {}
 
+concurrency:
+  group: despierta
+  cancel-in-progress: false
+
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 340
     steps:
+      - name: esperar a la mañana si es de noche
+        run: |
+          hora=$(date -u +%-H)
+          if [ "$hora" -ge 5 ] && [ "$hora" -le 22 ]; then exit 0; fi
+          dia=today
+          if [ "$hora" -ge 23 ]; then dia=tomorrow; fi
+          espera=$(( $(date -u -d "$dia 05:00" +%s) - $(date -u +%s) ))
+          # Un trabajo no puede durar 6 horas: si falta tanto, lo hará otra ejecución.
+          if [ "$espera" -gt 19800 ]; then exit 0; fi
+          sleep "$espera"
       - name: ping
         env:
           # La variable del repo TUTOR_URL manda si existe.

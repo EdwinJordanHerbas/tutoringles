@@ -30,6 +30,8 @@ async function pintarDiagnosticoHoy() {
   if (!caja) return;
   // Con el francés activo, el test es otro (ver abajo, "EL TEST DEL FRANCÉS").
   if (typeof _idioma !== 'undefined' && _idioma === 'fr') return pintarDiagnosticoFrHoy(caja);
+  // En alemán no hay test: se empieza desde cero.
+  if (typeof _idioma !== 'undefined' && _idioma === 'de') { caja.innerHTML = ''; return; }
   try {
     _dgEstado = await apiGet('/diagnostico');
   } catch { return; }

@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="description" content="TutorIngles — PWA personal para aprender inglés y francés hasta el C1 (Cambridge y DALF), con SRS, situaciones reales y modo Tetris.">
+<meta name="description" content="TutorIngles — PWA personal para aprender inglés, alemán y francés (Cambridge y DALF), con SRS, situaciones reales y modo Tetris.">
 <meta name="theme-color" content="#d4e8f5">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="light-content">
 <meta name="apple-mobile-web-app-title" content="TutorIngles">
 <link rel="manifest" href="manifest.json">
-<title>TutorIngles — inglés y francés hasta el C1</title>
+<title>TutorIngles — inglés, alemán y francés</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
@@ -31,7 +31,7 @@
   <div class="splash-inner">
     <img class="splash-logo" src="src/img/logo.png" alt="TutorInglés" width="256" height="256">
     <h1 class="splash-title">TUTOR<span>INGLÉS</span></h1>
-    <p class="splash-sub">Inglés y francés · hacia el C1</p>
+    <p class="splash-sub">Inglés, alemán y francés</p>
     <div class="splash-bar"><div class="splash-fill"></div></div>
   </div>
 </div>
@@ -101,6 +101,10 @@
            está activado: es la pieza de la que depende que la app se abra, y
            enterrada en Ajustes no la encontró nadie en once días. -->
       <div id="aviso-hoy"></div>
+
+      <!-- La entrevista en alemán: secundaria a propósito, EMPEZAR sigue siendo
+           el único primario. Se quita sola (plan.js). -->
+      <div id="entrevista-hoy"></div>
 
       <!-- Test de nivel. Va aquí arriba mientras no esté hecho porque el plan
            entero se apoya en ese dato y hasta el 12-ago no existía: el nivel
