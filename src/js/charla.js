@@ -1105,6 +1105,7 @@ function charlaAlternarVoz() {
  * calentar el motor; fuera de iOS no hace falta.
  */
 function charlaDesbloquearVoz() {
+  if (charlaVozActiva() && typeof vozDesbloquearAudio === 'function') vozDesbloquearAudio();
   if (charlaVozLista || !charlaVozActiva()) return;
   if (typeof vozEsIOS !== 'function' || !vozEsIOS()) { charlaVozLista = true; return; }
   try {

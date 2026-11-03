@@ -244,6 +244,7 @@ let _guardia = null;           // temporizador del apaño de Chrome
 
 /** Corta cualquier cosa que esté sonando. */
 function vozParar() {
+  _redTurno++;                    // lo que esté descargándose ya no debe sonar
   if (_audio) {
     // Igual que al terminar: soltar el elemento, no sólo pausarlo, para que iOS
     // cierre la sesión de media y deje de atenuar la voz del sistema.
@@ -294,6 +295,12 @@ function vozDecir(texto, opciones = {}) {
   // nunca llegó a verse.
   const idPal = sinGrabado || base !== 'en' ? null : audioDePalabra(texto);
   if (idPal != null) return vozReproducir(`src/audio/word-${idPal}.mp3`, btn, texto, opciones);
+
+  // El alemán suena con un mp3 del servidor: no depende del modo silencio ni de
+  // tener voz instalada. Sólo la noche (`volumen`) sigue con la voz del sistema.
+  if (base === 'de' && !opciones.sinRed && veces === 1 && opciones.volumen == null) {
+    return vozRed(texto, opciones);
+  }
 
   if (!('speechSynthesis' in window)) {
     if (typeof toast === 'function') toast('Este navegador no lee en voz alta', 'error');
@@ -382,6 +389,66 @@ const vozEsIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) ||
 
 function pararGuardia() {
   if (_guardia) { clearInterval(_guardia); _guardia = null; }
+}
+
+// ── AUDIO DEL SERVIDOR ──────────────────────────────────
+// iOS sólo deja sonar un <audio> que ya haya sonado tras un toque. La respuesta
+// de la IA llega segundos después del toque, así que el mismo elemento se
+// «estrena» con un silencio al tocar y se reutiliza cuando llega el audio.
+let _redAudio = null;
+let _redTurno = 0;
+const VOZ_SILENCIO = 'data:audio/wav;base64,UklGRmQGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YUAGAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA';
+
+/** Llamar dentro de un toque. */
+function vozDesbloquearAudio() {
+  try {
+    if (!_redAudio) _redAudio = new Audio();
+    if (_audio === _redAudio) return;
+    _redAudio.src = VOZ_SILENCIO;
+    const p = _redAudio.play();
+    if (p) p.catch(() => {});
+  } catch {}
+}
+
+async function vozRed(texto, opciones = {}) {
+  const { btn = null, lento = false } = opciones;
+  vozParar();
+  vozDesbloquearAudio();
+  const turno = ++_redTurno;
+  if (btn) btn.classList.add('anim-pulse');
+  const fin = () => { if (btn) btn.classList.remove('anim-pulse'); };
+  try {
+    const r = await fetch(`${API_BASE}/tts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${_token}` },
+      body: JSON.stringify({ texto, lang: 'de' }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const url = URL.createObjectURL(await r.blob());
+    if (turno !== _redTurno) { URL.revokeObjectURL(url); return fin(); }
+    const a = _redAudio;
+    const velocidad = () => {
+      a.preservesPitch = true;
+      a.webkitPreservesPitch = true;
+      a.playbackRate = lento ? VOZ_LENTO_MP3 : 1;
+    };
+    a.src = url;
+    velocidad();
+    a.onloadedmetadata = velocidad;
+    a.onended = () => {
+      fin();
+      URL.revokeObjectURL(url);
+      if (_audio === a) _audio = null;
+    };
+    _audio = a;
+    await a.play();
+    return 'red';
+  } catch {
+    fin();
+    if (turno !== _redTurno) return false;
+    if (_redAudio) _audio = null;
+    return vozDecir(texto, { ...opciones, sinRed: true });
+  }
 }
 
 /**

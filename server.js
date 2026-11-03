@@ -56,7 +56,7 @@ function tokenValido(recibido) {
 const tokenDe = (req) =>
   (req.headers.authorization || '').replace('Bearer ', '') || req.query.token || '';
 
-const PUBLIC_PATHS = [/^\/health$/, /^\/ping$/, /^\/auth\/check$/];
+const PUBLIC_PATHS = [/^\/health$/, /^\/ping$/, /^\/auth\/check$/, /^\/tts\/estado$/];
 app.use((req, res, next) => {
   if (!APP_TOKEN) return next();
   if (PUBLIC_PATHS.some(r => r.test(req.path))) return next();
@@ -125,6 +125,7 @@ const iaP       = require('./lib/ia-prompts');
 const iaPerfil  = require('./lib/ia-perfil');
 const { iaMock } = require('./lib/ia-mock');
 const { arrancarDespierto } = require('./lib/despierto');
+const tts = require('./lib/tts');
 
 // ── IDIOMA ACTIVO ────────────────────────────────────────
 // Desde el 27-sep-2026 la app entrena inglés Y francés. El contenido lleva una
@@ -291,6 +292,30 @@ async function conFigurada(filas, campo, destino = 'pron') {
 // la consultara cada 10 minutos, Neon tampoco se dormiría nunca y se gastarían
 // las horas de cómputo gratuitas.
 app.get('/ping', (req, res) => res.json({ ok: true }));
+
+// Audio del alemán (lib/tts.js). El estado es público y siempre lee la misma
+// palabra: sirve para saber si el lector responde sin tener la clave de la app.
+app.get('/tts/estado', async (req, res) => {
+  try {
+    const audio = await tts.audioDe('Hallo');
+    res.json({ ok: true, bytes: audio.length });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/tts', async (req, res) => {
+  const lang = req.body?.lang === 'de' ? 'de' : null;
+  const texto = typeof req.body?.texto === 'string' ? req.body.texto : '';
+  if (!lang || !texto.trim()) return res.status(400).json({ error: 'texto y lang requeridos' });
+  try {
+    const audio = await tts.audioDe(texto, lang);
+    res.set('Content-Type', 'audio/mpeg').set('Cache-Control', 'no-store').send(audio);
+  } catch (e) {
+    console.error('[tts]', e.message);
+    res.status(502).json({ error: 'No se ha podido generar el audio' });
+  }
+});
 
 app.get('/health', async (req, res) => {
   try {

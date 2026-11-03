@@ -84,3 +84,29 @@ test('la app sólo se mantiene despierta dentro de la franja', () => {
 test('sin dirección pública no se arranca el temporizador', () => {
   assert.strictEqual(arrancarDespierto({ url: '' }), null);
 });
+
+const { trocear, audioDe } = require('../lib/tts');
+
+test('el texto se trocea sin pasarse del límite del lector ni perder palabras', () => {
+  const frase = 'Guten Tag, wie geht es Ihnen heute? ';
+  const texto = frase.repeat(12);
+  const trozos = trocear(texto);
+  assert.ok(trozos.length > 1);
+  for (const t of trozos) assert.ok(t.length <= 190, `trozo de ${t.length}`);
+  assert.strictEqual(trozos.join(' ').replace(/\s+/g, ' '), texto.trim());
+  const sinPuntos = trocear('wort '.repeat(80));
+  for (const t of sinPuntos) assert.ok(t.length <= 190);
+});
+
+test('el audio pide cada frase una vez y rechaza lo que no es audio', async () => {
+  let llamadas = 0;
+  const bien = async () => {
+    llamadas += 1;
+    return { ok: true, headers: { get: () => 'audio/mpeg' }, arrayBuffer: async () => new Uint8Array([1, 2]).buffer };
+  };
+  await audioDe('Eine Prueba única', 'de', bien);
+  await audioDe('Eine Prueba única', 'de', bien);
+  assert.strictEqual(llamadas, 1);
+  const mal = async () => ({ ok: true, headers: { get: () => 'text/html' }, arrayBuffer: async () => new ArrayBuffer(0) });
+  await assert.rejects(audioDe('Otra frase distinta', 'de', mal));
+});

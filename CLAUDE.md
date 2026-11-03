@@ -55,6 +55,10 @@ o los usuarios se quedan con la versión cacheada.
 - **En CONVERSAR, el alemán lleva figurada de la IA** (`figurada`, `sugerencias_figurada`, vacías en
   otros idiomas), botones ESCUCHAR y DESPACIO, y `charlaAvisarSinVoz` si el móvil no empieza a hablar en
   3,5 s (`alFallar` de `vozDecir`). `vozParar` ya no llama a `cancel()` si no hay nada sonando.
+- **El alemán suena con mp3 del servidor** (`lib/tts.js`, `POST /tts`, `vozRed` en voz.js), porque la
+  voz del sistema no sonaba en el iPhone. Usa el lector de Google Translate, que no es oficial:
+  `GET /tts/estado` dice si responde, y si falla se cae a la voz del sistema. Un `<audio>` sólo suena
+  tras un toque en iOS: `vozDesbloquearAudio()` lo estrena con un silencio dentro del toque.
 - **Despierta**: el cron de GitHub corría cada varias horas, así que la app se llama a sí misma de
   día (`lib/despierto.js`, usa `RENDER_EXTERNAL_URL`) y la ejecución de medianoche de GitHub espera
   hasta las 05:00 UTC para despertarla. Ver "Despliegue".
