@@ -140,6 +140,24 @@ const SONS_DE = [
   },
 ];
 
+/** Cómo se lee el alemán: en SONIDOS y en CONVERSAR. */
+function sonsGuiaLectura() {
+  const filas = [
+    ['ei', 'ai', 'Arbeit: AR-bait'], ['ie', 'i', 'viele: FI-le'], ['eu, äu', 'oi', 'Deutsch: doich'],
+    ['w', 'v', 'Wann: van'], ['v', 'f', 'Vertrag: fer-TRAK'], ['j', 'y', 'Jahre: YA-re'], ['z', 'ts', 'Zimmer: TSI-ma'],
+    ['sch', 'sh', 'Schicht: shijt'], ['st-, sp-', 'sht-, shp-', 'Stunde: SHTUN-de'],
+    ['ch', 'j suave tras e, i, ö, ü; j fuerte tras a, o, u', 'ich: ij · noch: noj'],
+    ['h', 'un soplo al empezar palabra; muda tras vocal', 'Haus: haus · gehen: GUE-en'],
+    ['-er final', 'a', 'aber: A-ba'], ['ß', 's', 'heiße: HAI-se'],
+    ['ü', 'di «i» con labios de «u»', 'Küche: KÜ-je'], ['ö', 'di «e» con labios de «o»', 'schön: shön'],
+  ];
+  return `<details class="guia-lectura">
+    <summary>Cómo se lee el alemán</summary>
+    <p>Casi todo se lee siempre igual, pero no como en español: estas son las letras que cambian. En rojo verás cómo suena cada frase, con la sílaba fuerte en MAYÚSCULAS.</p>
+    <table><tbody>${filas.map(([a, b, c]) => `<tr><td>${a}</td><td>${b}</td><td lang="de">${c}</td></tr>`).join('')}</tbody></table>
+  </details>`;
+}
+
 const sonsAleman = () => typeof _idioma !== 'undefined' && _idioma === 'de';
 const sonsBanco = () => (sonsAleman() ? SONS_DE : SONS_FR);
 const sonsVoz = () => (sonsAleman() ? 'de-DE' : 'fr-FR');
@@ -193,6 +211,7 @@ function initSons() {
         tendría respuesta: instálala en Ajustes ›
         Accesibilidad › Contenido hablado › Voces.</div>` : ''}
     </div>
+    ${aleman ? sonsGuiaLectura() : ''}
     <div id="sons-lista">
       ${sonsBanco().map((s) => {
         const p = prog[s.slug];

@@ -175,7 +175,10 @@ function iaHtmlBotonDecir(texto, lang) {
 function iaDecirBoton(btn) {
   const texto = btn?.dataset?.iaDecir;
   if (!texto || typeof vozDecir !== 'function') return;
-  vozDecir(texto, { btn, lang: iaVozDe(btn.dataset.iaLang) });
+  vozDecir(texto, {
+    btn, lang: iaVozDe(btn.dataset.iaLang), lento: btn.dataset.iaLento === '1',
+    alFallar: typeof charlaAvisarSinVoz === 'function' ? charlaAvisarSinVoz : undefined,
+  });
 }
 
 /** 'fr' → 'fr-FR'. Lo que no sea un idioma de la app va al idioma activo. */

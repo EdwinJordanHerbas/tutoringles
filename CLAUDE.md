@@ -52,6 +52,9 @@ o los usuarios se quedan con la versión cacheada.
   SONIDOS en alemán usa `SONS_DE` en sons.js, con el progreso en `sons_de`.
 - **HOY enseña la entrevista** en cualquier idioma hasta `ENTREVISTA_HASTA` (plan.js) y se quita
   sola. Es secundaria: EMPEZAR sigue siendo el único primario.
+- **En CONVERSAR, el alemán lleva figurada de la IA** (`figurada`, `sugerencias_figurada`, vacías en
+  otros idiomas), botones ESCUCHAR y DESPACIO, y `charlaAvisarSinVoz` si el móvil no empieza a hablar en
+  3,5 s (`alFallar` de `vozDecir`). `vozParar` ya no llama a `cancel()` si no hay nada sonando.
 - **Despierta**: el cron de GitHub corría cada varias horas, así que la app se llama a sí misma de
   día (`lib/despierto.js`, usa `RENDER_EXTERNAL_URL`) y la ejecución de medianoche de GitHub espera
   hasta las 05:00 UTC para despertarla. Ver "Despliegue".

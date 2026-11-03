@@ -388,3 +388,47 @@
   line-height: 1.55;
   color: var(--text-2);
 }
+
+/* Cómo suena cada frase en alemán, y escuchar con nombre: el icono solo no se veía. */
+.charla-fig {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: #b3261e;
+  overflow-wrap: anywhere;
+}
+.charla-oir {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 5px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 122, 255, 0.30);
+  background: var(--accent-dim);
+  color: #0058b8;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 1px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.charla-herr { flex-wrap: wrap; }
+.charla-chip-fila { display: flex; align-items: center; gap: 6px; }
+.charla-chip-fila .charla-chip { flex: 1; min-width: 0; }
+.charla-voz-aviso { margin-bottom: 8px; }
+.guia-lectura {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.5));
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+.guia-lectura summary { font-weight: 700; cursor: pointer; }
+.guia-lectura p { margin: 8px 0; color: var(--text-2); }
+.guia-lectura table { width: 100%; border-collapse: collapse; }
+.guia-lectura td { padding: 4px 6px 4px 0; vertical-align: top; border-top: 1px solid rgba(0, 0, 0, 0.08); }
+.guia-lectura td:first-child { font-weight: 700; white-space: nowrap; }

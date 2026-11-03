@@ -25,7 +25,7 @@ const RESPUESTAS = [
     ejercicio: 'Di ship – sheep tres veces.', errores: [{ ...ERR, tipo: 'pronunciacion', clave: '/ɪ/ corta frente a /iː/ larga', mal: 'sheep', bien: 'ship' }],
   })],
   ['compañero de conversación', () => ({
-    respuesta: 'Bonjour ! Qu\'est-ce que je vous sers ?', traduccion: '¡Buenos días! ¿Qué le pongo?',
+    respuesta: 'Bonjour ! Qu\'est-ce que je vous sers ?', figurada: '', sugerencias_figurada: [], traduccion: '¡Buenos días! ¿Qué le pongo?',
     correccion: { hay_error: true, dijiste: 'je veux le baguette', mejor: 'Je voudrais une baguette', explicacion: 'Femenino y condicional de cortesía.' },
     sugerencias: ['Une baguette, s\'il vous plaît.', 'Je prendrai aussi un croissant.', 'C\'est tout.', 'sobra'], terminado: false, errores: [ERR],
   })],

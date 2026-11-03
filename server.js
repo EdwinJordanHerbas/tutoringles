@@ -1917,7 +1917,7 @@ app.post('/ia/conversacion', async (req, res) => {
       // Con el dictado del teclado no hay forma de saber si se dictó o se tecleó,
       // así que no cuenta (la regla de las metas que se marcan solas).
       if (mensaje && b.via === 'voz') await marcarHabladoIA('Conversación con IA');
-      return { ...d, sugerencias: (d.sugerencias || []).slice(0, 3), lang, coste: r.coste, tarjetas };
+      return { ...d, sugerencias: (d.sugerencias || []).slice(0, 3), sugerencias_figurada: (d.sugerencias_figurada || []).slice(0, 3), lang, coste: r.coste, tarjetas };
     };
     // La apertura (sin mensaje) no se recuerda: OTRA VEZ en la misma escena
     // tiene que poder empezar de otra forma.

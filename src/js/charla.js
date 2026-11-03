@@ -518,6 +518,8 @@ function charlaPintarConversacion() {
         <div class="charla-escena-sub"><span class="ia-marca">IA</span>
           <span>Claude hace de ${escaparHtml(deQuien)} · en ${escaparHtml(charlaNombreIdioma(lang))}</span></div>
       </div>
+      ${lang === 'de' && typeof sonsGuiaLectura === 'function' ? sonsGuiaLectura() : ''}
+      <div id="charla-voz-aviso"></div>
       <div class="charla-hilo" id="charla-hilo"></div>
       <div id="charla-entrada"></div>
       <div id="charla-pie"></div>
@@ -531,6 +533,26 @@ function charlaHtmlBotonVoz() {
   const on = charlaVozActiva();
   return `<button class="charla-voz${on ? ' charla-voz-on' : ''}" id="charla-voz" aria-pressed="${on}"
     aria-label="Leer en voz alta las respuestas" onclick="charlaAlternarVoz()">${ico('listen', 16)}<span>${on ? 'VOZ' : 'SIN VOZ'}</span></button>`;
+}
+
+/** Escuchar y escuchar despacio: con nombre, porque el icono solo no se veía. */
+function charlaHtmlEscuchar(texto, lang) {
+  const b = (etiqueta, lento) => `<button class="charla-oir" data-ia-decir="${escaparAttr(texto)}"
+    data-ia-lang="${escaparAttr(lang || '')}" data-ia-lento="${lento}" onclick="iaDecirBoton(this)">${ico('listen', 14)}<span>${etiqueta}</span></button>`;
+  return b('ESCUCHAR', '0') + b('DESPACIO', '1');
+}
+
+/** Si el móvil no ha empezado a hablar, se dice qué mirar en vez de callar. */
+function charlaAvisarSinVoz() {
+  const caja = document.getElementById('charla-voz-aviso');
+  if (!caja) return;
+  const lang = charlaEstado?.escena.lang || charlaLang();
+  const nombre = charlaNombreIdioma(lang);
+  const sinVoz = typeof hayVozDe === 'function' && !hayVozDe(iaVozDe(lang));
+  caja.innerHTML = `<div class="pron-honestidad charla-voz-aviso">
+    <b>El móvil no ha leído la frase.</b> ${sinVoz ? `No encuentra una voz en ${escaparHtml(nombre)}. ` : ''}Pulsa ESCUCHAR. Si no suena, instala la voz:
+    Ajustes del iPhone › Accesibilidad › Contenido hablado › Voces › ${escaparHtml(nombre[0].toUpperCase() + nombre.slice(1))}.
+    Luego cierra la app del todo y ábrela.</div>`;
 }
 
 function charlaPintarHilo() {
@@ -561,15 +583,19 @@ function charlaHtmlTurnoIa(t, i, conSugerencias) {
       <div class="charla-sug-tit">${iaHayMicro()
         ? '¿En blanco? Toca una para tenerla en el campo y dila tú:'
         : '¿En blanco? Toca una para verla encima del campo y díctala tú:'}</div>
-      ${t.sugerencias.map((s, j) => `<button class="charla-chip" lang="${lang}" onclick="charlaUsarSugerencia(${j})">${escaparHtml(s)}</button>`).join('')}
+      ${t.sugerencias.map((s, j) => `<div class="charla-chip-fila">
+        <button class="charla-chip" lang="${lang}" onclick="charlaUsarSugerencia(${j})">${escaparHtml(s)}${t.sugerenciasFig?.[j] ? `<span class="charla-fig">${escaparHtml(t.sugerenciasFig[j])}</span>` : ''}</button>
+        ${iaHtmlBotonDecir(s, lang)}
+      </div>`).join('')}
     </div>` : '';
   // La traducción va escondida: primero se intenta entender de oído.
   return `<div class="charla-turno charla-ia">
     <div class="charla-burbuja">
       <div class="charla-quien">${escaparHtml(quien || 'Claude')}</div>
       <div class="charla-texto" lang="${lang}">${escaparHtml(t.texto)}</div>
+      ${t.figurada ? `<div class="charla-fig">${escaparHtml(t.figurada)}</div>` : ''}
       <div class="charla-herr">
-        ${iaHtmlBotonDecir(t.texto, lang)}
+        ${charlaHtmlEscuchar(t.texto, lang)}
         ${t.traduccion ? `<button class="charla-trad-btn" id="charla-trad-btn-${i}" aria-expanded="${!!t.verTrad}"
           onclick="charlaVerTraduccion(${i})">${t.verTrad ? 'OCULTAR' : '¿QUÉ DICE?'}</button>` : ''}
       </div>
@@ -746,6 +772,9 @@ function charlaEnviarTexto(porTeclado = false) {
     return;
   }
   charlaDesbloquearVoz();
+  // Con el dictado abierto, iOS tiene el micro y la voz no sale: al enviar se
+  // cierra el teclado para que la respuesta se pueda oír.
+  if (typeof vozEsIOS === 'function' && vozEsIOS()) ta.blur();
   // Lo que sale del campo es SIEMPRE 'texto' y no marca HABLAR: el reconocedor
   // nunca escribe en él (charlaMicro envía lo que oye sin pasar por aquí). Si
   // coincide con lo último que oyó, es que se ha tecleado o dictado igual, y
@@ -924,9 +953,11 @@ async function charlaPedir() {
   est.turnos.push({
     rol: 'ia',
     texto: respuesta || '…',
+    figurada: String(r.figurada || '').trim(),
     traduccion: String(r.traduccion || '').trim(),
     sugerencias: (Array.isArray(r.sugerencias) ? r.sugerencias : [])
       .filter((s) => typeof s === 'string' && s.trim()).slice(0, 3),
+    sugerenciasFig: Array.isArray(r.sugerencias_figurada) ? r.sugerencias_figurada : [],
     tarjetas: Array.isArray(r.tarjetas) ? r.tarjetas : [],
     verTrad: false,
   });
@@ -945,7 +976,7 @@ async function charlaPedir() {
     document.getElementById('charla-txt')?.focus();
   }
   if (respuesta && charlaVozActiva() && charlaVisible() && typeof vozDecir === 'function') {
-    vozDecir(respuesta, { lang: iaVozDe(est.escena.lang) });
+    vozDecir(respuesta, { lang: iaVozDe(est.escena.lang), alFallar: charlaAvisarSinVoz });
   }
 }
 
@@ -989,7 +1020,8 @@ function charlaUsarSugerencia(j) {
     const chuleta = document.getElementById('charla-chuleta');
     if (chuleta) {
       chuleta.innerHTML = `<div class="charla-chuleta-tit">Díctala con el micro del teclado</div>
-        <div class="charla-chuleta-txt" lang="${est.escena.lang}">${escaparHtml(s)}</div>`;
+        <div class="charla-chuleta-txt" lang="${est.escena.lang}">${escaparHtml(s)}</div>
+        ${ultIa.sugerenciasFig?.[j] ? `<div class="charla-fig">${escaparHtml(ultIa.sugerenciasFig[j])}</div>` : ''}`;
       chuleta.hidden = false;
     }
     ta.focus();

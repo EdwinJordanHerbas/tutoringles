@@ -253,7 +253,12 @@ function vozParar() {
     _audio = null;
   }
   if (_guardia) { clearInterval(_guardia); _guardia = null; }
-  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  // Sólo si hay algo que cortar: en iOS, un cancel() justo antes de un speak()
+  // puede hacer que la locución nueva no suene.
+  if ('speechSynthesis' in window) {
+    const s = window.speechSynthesis;
+    if (s.speaking || s.pending) s.cancel();
+  }
 }
 
 /**
@@ -324,6 +329,16 @@ function vozDecir(texto, opciones = {}) {
     window.speechSynthesis.speak(calienta);
   }
 
+  // iOS puede dejar la voz en pausa tras volver de segundo plano, y entonces
+  // nada suena. Reanudar antes de hablar no corta nada: aún no ha empezado.
+  if (vozEsIOS()) window.speechSynthesis.resume();
+
+  // Si el móvil no llega a empezar a hablar, quien llama puede explicarlo.
+  let empezo = false;
+  if (opciones.alFallar) {
+    setTimeout(() => { if (!empezo) opciones.alFallar(); }, 3500);
+  }
+
   for (let i = 0; i < veces; i++) {
     // Un punto al final le da cola al enunciado: sin él, iOS corta también el
     // final de las palabras cortas.
@@ -332,6 +347,7 @@ function vozDecir(texto, opciones = {}) {
     u.rate = rate;
     u.volume = volumen;           // explícito: que nadie lo herede a medias
     if (voz) u.voice = voz;
+    u.onstart = () => { empezo = true; };
     if (btn && i === 0) btn.classList.add('anim-pulse');
     if (btn && i === veces - 1) {
       u.onend = u.onerror = () => { btn.classList.remove('anim-pulse'); pararGuardia(); };
